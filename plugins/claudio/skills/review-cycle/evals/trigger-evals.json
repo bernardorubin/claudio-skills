@@ -2,6 +2,7 @@
   {"query": "review PR 512 and fix whatever it finds", "should_trigger": true},
   {"query": "run the review cycle on this branch's PR", "should_trigger": true},
   {"query": "do the review loop until it's clean, then push", "should_trigger": true},
+  {"query": "address the CodeRabbit comments on my PR and push the fixes", "should_trigger": true},
   {"query": "review PR 512, just report, don't change anything", "should_trigger": false},
   {"query": "audit the whole repo", "should_trigger": false},
   {"query": "write a PR description for 512", "should_trigger": false}
