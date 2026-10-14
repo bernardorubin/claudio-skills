@@ -21,14 +21,48 @@ from the Figma MCP (`get_screenshot`, `get_metadata`), and building the change i
 - `--dry`: report the grouping and the dedupe verdicts, file nothing, and don't move
   the default window forward.
 
+## Setup (once per person)
+
+**1. A Figma token.** In Figma: avatar menu, Settings, **Security** tab, "Personal access
+tokens", **Generate new token**. Name it (e.g. `Claude Code - figma-to-jira`), pick the
+longest expiration offered, and tick only these read scopes:
+
+- `current_user:read` (who "me" is, for the mention match)
+- `file_comments:read` (the comments)
+- `file_content:read` (frames, for the pin location and screenshots)
+- `file_metadata:read` (file names)
+
+Nothing with `write`. Add `export FIGMA_TOKEN=<token>` to the shell profile (or save it
+to `~/.config/claudio/figma-token`, `chmod 600`). The user pastes it there themselves:
+never ask for it in chat. Open the Security tab for them in the browser if they want, and
+tick the boxes, but they click **Generate token** and copy it.
+
+**2. The project's file list.** Personal tokens can't list a project's files: that
+endpoint needs `projects:read`, which the token page doesn't offer (`folders:read` doesn't
+cover it). So the file list comes from the logged-in Figma web app and is saved in
+`~/.config/claudio/figma.json`. Ask the user for any Figma link in the project. In a
+browser tab signed in to figma.com, read the project and team from a file key with
+`fetch('/api/files/<key>').then(r => r.json())` (`meta.folder_id`, `meta.team_id`), then
+the files:
+
+```js
+const p = new URLSearchParams({sort_column: 'touched_at', sort_order: 'desc', page_size: '100', fetch_only_trashed_with_folder_files: 'false'});
+const j = await (await fetch(`/api/folders/${folderId}/paginated_files?` + p)).json();
+j.meta.files.map(f => ({key: f.key, name: f.name}));
+```
+
+Write `{"projects": ["<folderId>"], "files": [...], "files_refreshed_at": "<now>"}`.
+Refresh the list the same way when it's more than about two weeks old, or when the user
+mentions a file the scan didn't cover.
+
 ## Step 1: Scan
 
 ```bash
 python3 <skill-dir>/scripts/figma_comments.py [--since 2d] [--all] > <scratch>/figma-threads.json
 ```
 
-It reads `~/.config/claudio/figma.json` (`{"projects": [], "teams": [], "files": []}`),
-lists every file in those projects (teams expand to all their projects), and prints one
+It reads `~/.config/claudio/figma.json`, scans every file in the watched projects (from
+the saved file list when the token can't list them, noted under `warnings`), and prints one
 entry per open thread with a new comment from someone else that mentions the user or
 replies in a thread they're part of. Each entry has the file, the thread, `node_id`,
 `node_box`, `pin_offset` (the pin's position inside the node), the containing
@@ -40,16 +74,11 @@ or `~/.config/claudio/figma-token`. The script never prints it; never print it y
 
 **Errors are access blocks, so stop and ask.** The script exits 2 with a JSON reason:
 
-- **No config**: ask the user for any link inside the Figma project (a file URL is
-  enough). A project URL carries the id (`.../files/<org>/project/<id>/...`). For a file
-  URL, open it in the logged-in browser and read `folder_id` (the project) and `team_id`
-  from `fetch('/api/files/<key>').then(r => r.json())`. Write the ids to the config.
-- **Missing scope**: the message names it. Listing a project's files needs
-  `projects:read`; comments need `file_comments:read`; frames need `file_content:read`.
-  Ask the user to create a token with those scopes. Until then, `--file <key>` scans
-  named files without listing the project.
+- **No config or no saved file list**: run Setup step 2.
+- **No token, or a missing scope**: the message names the scope. Run Setup step 1.
 
-Report the counts first: files scanned, threads found, the window.
+A full project scan takes about a minute (one comments call per file). Report the counts
+first: files scanned, threads found, the window, and how old the saved file list is.
 
 ## Step 2: Read each thread and decide what it is
 

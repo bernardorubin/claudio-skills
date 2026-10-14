@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """List the Figma comment threads that need the current user's attention.
 
-Scans every file in the configured Figma projects and teams (plus any extra
-files), keeps the threads with a new comment in the window that mention the
+Scans every file in the watched Figma projects, keeps the threads with a new comment in the window that mention the
 user or reply in a thread the user is part of, and prints them as JSON:
 file, thread, where it is pinned (node and its top-level frame), a deep link,
 and every comment in the thread.
@@ -12,9 +11,16 @@ Stdlib only. The token never reaches stdout.
   figma_comments.py [--since 3d|48h|2026-10-10] [--project ID] [--team ID]
                     [--file KEY] [--all] [--include-resolved] [--save-run]
 
-Config: ~/.config/claudio/figma.json  {"projects": [], "teams": [], "files": []}
+Config: ~/.config/claudio/figma.json
+  {"projects": ["<id>"], "teams": [], "files": [{"key": "...", "name": "..."}],
+   "files_refreshed_at": "<iso>"}
+  Personal access tokens can't list a project's files (that needs projects:read,
+  which Figma only grants to OAuth apps), so `files` is the project's file list,
+  refreshed from the logged-in Figma web app (see SKILL.md). When the REST listing
+  is refused, the script falls back to that list and says so under "warnings".
 Token:  $FIGMA_TOKEN, else an `export FIGMA_TOKEN=...` line in a shell profile,
-        else ~/.config/claudio/figma-token.
+        else ~/.config/claudio/figma-token. Scopes: current_user:read,
+        file_comments:read, file_content:read, file_metadata:read.
 """
 
 import argparse
@@ -60,12 +66,17 @@ def token():
                 return value
     except OSError:
         pass
-    fail("No Figma token. Create a personal access token (Figma > Settings > Security) with "
-         "file_comments:read, file_content:read and projects:read, then export FIGMA_TOKEN in "
-         "your shell profile or save it to ~/.config/claudio/figma-token (chmod 600).")
+    fail("No Figma token. Create a personal access token (Figma > Settings > Security > "
+         "Generate new token) with current_user:read, file_comments:read, file_content:read and "
+         "file_metadata:read, then export FIGMA_TOKEN in your shell profile or save it to "
+         "~/.config/claudio/figma-token (chmod 600).")
 
 
-def get(path, tok, params=None):
+class ScopeError(Exception):
+    pass
+
+
+def get(path, tok, params=None, soft=False):
     url = API + path + ("?" + urllib.parse.urlencode(params) if params else "")
     request = urllib.request.Request(url, headers={"X-Figma-Token": tok})
     try:
@@ -74,6 +85,8 @@ def get(path, tok, params=None):
     except urllib.error.HTTPError as error:
         body = error.read().decode("utf-8", "replace")[:400]
         if error.code == 403 and "scope" in body:
+            if soft:
+                raise ScopeError(body)
             fail(f"Figma token is missing a scope for {path}: {body}")
         if error.code == 403:
             fail(f"403 on {path}: the token's account has no access. {body}")
@@ -173,18 +186,29 @@ def main():
     me = get("/me", tok)
     my_id, my_handle = me["id"], me.get("handle", "")
 
-    files = {}
-    for team in teams:
-        for project in get(f"/teams/{team}/projects", tok).get("projects", []):
-            projects.append(str(project["id"]))
-    for project in dict.fromkeys(projects):
-        listing = get(f"/projects/{project}/files", tok)
-        for entry in listing.get("files", []):
-            files[entry["key"]] = {"name": entry["name"], "project": listing.get("name")}
-    for key in extra:
-        if key not in files:
-            meta = get(f"/files/{key}/meta", tok).get("file", {})
-            files[key] = {"name": meta.get("name", key), "project": meta.get("folder_name")}
+    files, warnings = {}, []
+    try:
+        for team in teams:
+            for project in get(f"/teams/{team}/projects", tok, soft=True).get("projects", []):
+                projects.append(str(project["id"]))
+        for project in dict.fromkeys(projects):
+            listing = get(f"/projects/{project}/files", tok, soft=True)
+            for entry in listing.get("files", []):
+                files[entry["key"]] = {"name": entry["name"], "project": listing.get("name")}
+    except ScopeError:
+        warnings.append("The token can't list project files (personal tokens get no projects:read); "
+                        f"scanned the saved file list from {config.get('files_refreshed_at', 'an unknown date')}. "
+                        "Refresh it from the Figma web app when a file is added.")
+        if not extra:
+            fail("The token can't list the project's files and figma.json has no saved file list. "
+                 "Refresh `files` from the logged-in Figma web app (see SKILL.md, Setup).")
+    for entry in extra:
+        key, name = (entry.get("key"), entry.get("name")) if isinstance(entry, dict) else (entry, None)
+        if key in files:
+            continue
+        if not name:
+            name = get(f"/files/{key}/meta", tok).get("file", {}).get("name", key)
+        files[key] = {"name": name, "project": None}
 
     mention = re.compile(re.escape(my_handle), re.I) if my_handle else None
     threads, frame_cache = [], {}
@@ -237,6 +261,7 @@ def main():
         "user": my_handle,
         "since": since.isoformat(),
         "files_scanned": len(files),
+        "warnings": warnings,
         "threads": threads,
     }, indent=2, ensure_ascii=False))
 
