@@ -102,18 +102,38 @@ One ticket per piece of work, not per comment:
 - The same change asked on desktop and mobile frames → one ticket.
 - Different screens, different concerns → separate tickets, even from one person.
 
-## Step 4: Skip what's already ticketed
+## Step 4: Check Jira before filing anything
 
-For each group, search Jira for the thread ids (every ticket this skill files carries
-them) and for the request's distinctive words, the last ~60 days:
+Every group gets a verdict before any ticket is written. Most Figma comments land on a
+screen someone is already building, so "new ticket" is the last resort, not the default.
 
-```bash
-jira-curl <instance> GET "/rest/api/3/search/jql?jql=<urlencoded: project=KEY AND (text ~ \"1964482925\" OR text ~ \"promo banner\") AND created >= -60d>&fields=summary,status&maxResults=6"
-```
+**Search several ways, the last ~90 days plus every open ticket** (one JQL per angle,
+`fields=summary,status,assignee,parent&maxResults=10`):
 
-Read any plausible match. Covered and still open → comment the new Figma thread on it
-(link, quote, screenshot) instead of filing. Done and the comment asks for more →
-file new and link the old one. Try at least three phrasings before calling it new.
+1. **The thread ids** (`text ~ "1964482925"`): every ticket this skill files or comments
+   on carries them in its Figma links, so this catches anything already handled.
+2. **The Figma location**: the file key, and the node id both ways (`1344-13931`,
+   `1344:13931`). Tickets built from a frame usually link it.
+3. **The screen or frame name** and the feature it belongs to ("Desktop - Checkout",
+   "promo code", "metrics grid"), open tickets only.
+4. **The request's distinctive words** (the copy being changed, the component named).
+5. **Open tickets in the epic the frame belongs to**, read by summary: a ticket for the
+   same screen or section often doesn't share a single word with the comment.
+
+Try at least three phrasings before calling something new; a search that finds nothing is
+weak evidence. Read the description (and recent comments) of every plausible match before
+deciding.
+
+| What the search finds | Verdict |
+|---|---|
+| An open ticket that already asks for this change | **Covered.** Comment the Figma thread on it (quote, author, link, screenshot). No new ticket. |
+| An open ticket for the same screen or section, not started or in progress, whose owner would naturally do this too | **Fold in.** Comment the request on it as an added item (quote, link, screenshot, one acceptance line), and say in the report that its scope grew. Don't fold into a ticket that's in review or Ready for QA: file new and link it. |
+| A Done ticket that built this, and the comment asks for more or different | **Follow-up.** File new and link the Done ticket. Never reopen it unless the user says so. |
+| A related ticket, but a different change | **New, linked.** File new and link the related one in the body. |
+| Nothing after three phrasings | **New.** |
+
+Put the verdicts in the report (Step 7), each with the ticket it matched, so the user can
+see why nothing was filed for a comment.
 
 ## Step 5: Screenshot the spot
 
@@ -159,7 +179,8 @@ so the next default window starts from this run.
 ## Step 7: Report
 
 - New tickets: a link and one line each, with how many comments each one groups.
-- Existing tickets that got a comment: a link and what was added.
+- Existing tickets that got a comment: a link, the verdict (covered or folded in), and
+  what was added.
 - Questions to answer in Figma: the person, the question, the link.
 - Skipped: one line with the reasons.
 
