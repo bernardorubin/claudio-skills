@@ -75,9 +75,18 @@ message, the route, the feature name), several queries each:
 jira-curl <instance> GET "/rest/api/3/search/jql?jql=<urlencoded: project=KEY AND text ~ \"\\\"phrase\\\"\" AND created >= -60d ORDER BY created DESC>&fields=summary,status&maxResults=6"
 ```
 
+Also list the **open tickets for the same area** (the route, page or feature the error
+comes from, and the epic that owns it), read by summary: a ticket for the same flow
+often shares no words with the error message.
+
 Read the description of any plausible match before deciding:
 - **Covered, still open** → comment the recurrence (counts, window, new routes or
   users, the logs link). No new ticket.
+- **Fits an open ticket for the same area**, not started or in progress, whose owner
+  would naturally fix this too (same handler, same flow, same root module) → **fold
+  in**: comment it on that ticket as an added item (message, counts, logs link, one
+  acceptance line) and say in the report that its scope grew. Don't fold into a ticket
+  in review or Ready for QA: file new and link it.
 - **Covered but Done** and it's back → comment and reopen only if the user says so;
   otherwise file new and link the old one.
 - **Related, different cause** → file new and link the related ticket in the body.
@@ -126,7 +135,8 @@ add `group_by` for multi-day windows, and keep each window to about 4 days or it
 ## Step 7: Report
 
 A short list: each new ticket as a link with one line, each commented ticket as a
-link with what recurred, and the skipped noise in one line. Numbers with their window
+link with its verdict (recurrence or folded in) and what was added, and the skipped noise
+in one line. Numbers with their window
 ("8 in the 24 hours to 02:12 UTC"), never bare.
 
 ## Boundaries
