@@ -141,9 +141,13 @@ For each thread, with the Figma MCP (`get_screenshot`, `fileKey` and node id):
 
 - **Node at most about 2000px tall**: screenshot the node itself.
 - **Taller (a whole-page frame) or a tiny layer**: screenshot the top-level frame at
-  full resolution, then crop about 1440×900 design pixels centred on the pin. The pin
-  sits at `node_box` minus the frame's box, plus `pin_offset`. Scale by the rendered
-  width over the frame's design width, then `sips -c <h> <w> --cropOffset <y> <x>`.
+  full resolution, then crop about 1440×900 design pixels around the pin with
+  `ffmpeg -i in.png -vf "crop=<w>:<h>:<x>:<y>" out.png`. The pin sits at `node_box` minus
+  the frame's box, plus `pin_offset`. Don't use `sips --cropOffset`: it ignores the offset
+  and crops the centre.
+- **The render can be wider than the frame** when content overflows it (a carousel running
+  off the right edge): the image keeps the frame's left edge at x 0 and its scale is 1, so
+  crop from x 0 rather than centring on the image width.
 - Save to `~/Desktop/<TICKET-OR-SLUG>-figma/` with names that say what they show.
 
 Look at each image before attaching it. A crop that misses the pinned element is wrong.
