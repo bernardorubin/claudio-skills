@@ -343,6 +343,16 @@ Desktop draws SVG bars; the terminal draws `■□` bars. Updates after every tu
 
 Off by default, since another plugin's band (a skin, say) may want that spot: turn on the **Usage bars** option in `/config`, or set `pluginConfigs["claudio@claudio"].options.usageBars` to `true` in `~/.claude/settings.json`.
 
+#### Pet
+
+A small pixel pet on the band's right edge, showing at a glance whether Claude needs you:
+
+- **Working** (blue): hops and looks around while a turn runs.
+- **Your turn** (green): smiles and blinks now and then once the turn is done.
+- **Needs you** (orange): open mouth and a flashing "!" while a permission dialog, a question (AskUserQuestion) or a plan to approve (ExitPlanMode) waits on you.
+
+Desktop draws an animated SVG (still under reduced motion); the terminal draws a one-row text sprite, `( •_•)` stepping every half second. It shows with or without the usage bars, and gives way when the band is too narrow for both. An approved command keeps "Needs you" until it finishes, since no event marks the moment a dialog is approved. Off by default: turn on the **Pet** option in `/config`, or set `pluginConfigs["claudio@claudio"].options.pet` to `true`.
+
 ### `/slack-drafts`
 
 A pane for the drafts `/write-slack-message` saves to `~/Desktop/slack-drafts/`, plus an optional phone page so you can paste them from your iPhone with Slack formatting intact.

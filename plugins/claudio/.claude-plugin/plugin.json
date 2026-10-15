@@ -1,7 +1,7 @@
 {
   "name": "claudio",
   "description": "Claude Code toolkit: confidence-scored code reviews (PR, local, or full-repo audit), git workflow shortcuts, PR/Slack helpers, Claude meta skills, Jira integration, and per-project knowledge vaults (Karpathy-style LLM Wiki). All skills invocable with no prefix.",
-  "version": "4.7.0",
+  "version": "4.8.0",
   "author": {
     "name": "Bernardo Rubin",
     "url": "https://github.com/bernardorubin"
@@ -21,6 +21,12 @@
       "type": "boolean",
       "title": "Usage bars",
       "description": "Show the context and 5-hour limit bars above the prompt. Off by default, since another plugin's band (a skin, say) may want that spot.",
+      "default": false
+    },
+    "pet": {
+      "type": "boolean",
+      "title": "Pet",
+      "description": "Show a small animated pet above the prompt, right of the usage bars: blue while Claude works, green when it's your turn, orange when Claude needs an approval or an answer. Off by default.",
       "default": false
     }
   }
