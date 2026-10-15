@@ -181,6 +181,8 @@ Drafts a Slack message ready to paste, business-casual, with **no sentence cap**
 
 **Reading drafts back.** `/slack-drafts` opens a pane of every draft with **Copy for Slack** (an HTML clipboard copy, so `[label](url)` pastes as a real link) and delete, and its optional phone page brings the same copy to your iPhone. See [Mods](#mods).
 
+**With the Slack MCP connected**, the report line names where to post it (the thread, channel or DM, linked so one click opens it in Slack) and who to tag (each looked up in Slack, linked to their profile), instead of a vague `everyone`. It only reads through the MCP and never posts: anything posted that way carries a "Sent using Claude" footer.
+
 **On a phone**, say so and the reply links the Slack Drafts phone page instead of the file path. The draft never goes in the chat, on any device.
 
 Auto-triggers on phrases like "draft a slack message", "how should I phrase this for slack", "write up a slack post".

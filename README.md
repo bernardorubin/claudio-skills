@@ -40,7 +40,7 @@ Everything is a **skill** — no `claudio:` prefix needed when invoking. Skills 
 | `/pr-review` | "review this PR", "review my uncommitted changes", "audit the whole repo" — three modes: PR / local / full-repo; picks frontend or backend reviewers from the changed files |
 | `/review-cycle` | "run the review cycle", "review and fix this PR", "do the review loop", "address Copilot's comments" — reviews → posts a living PR comment → folds in any AI reviewer already on the PR (Copilot, CodeRabbit, ...) → fixes what's worth fixing → pushes → answers and resolves the bot threads → updates the comment, until clean (reuses `/pr-review`) |
 | `/pr-description` | "write a PR description", "draft the PR body", "update the PR" |
-| `/write-slack-message` | "draft a slack message", "how should I phrase this for slack" — tiny by default, saves to a drafts folder, which the `/slack-drafts` pane shows with a copy button that keeps Slack links working |
+| `/write-slack-message` | "draft a slack message", "how should I phrase this for slack" — tiny by default, saves to a drafts folder, which the `/slack-drafts` pane shows with a copy button that keeps Slack links working; with the Slack MCP, names where to post (linked) and who to tag |
 | `/prd-to-jira` | "create tickets from this PRD", "break this down into jira tasks" |
 | `/jira-cli` | Jira URL or key (ACME-1234, WEB-456), "update the description on ABC-123", "add a comment to …", "what's the status of …", "move this to in progress" |
 | `/vault-keeper` | "save this to the vault", "what does the wiki say about X", "ingest this doc", "lint the wiki" (auto-fires inside any registered vault project) |

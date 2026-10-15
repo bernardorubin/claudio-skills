@@ -6,7 +6,9 @@ description: >-
   slack", "send this on slack", or any request to format text for Slack. Saves a copy-
   paste-ready draft to ~/Desktop/slack-drafts/ (shown in the /slack-drafts pane and
   on the Slack Drafts phone page), falling back to
-  ~/Desktop/slack-message-for-<recipient>.md. Never puts the draft in the chat.
+  ~/Desktop/slack-message-for-<recipient>.md. With the Slack MCP connected it names
+  where to post (linked so it opens in Slack) and who to tag; it never posts through
+  the MCP. Never puts the draft in the chat.
 ---
 
 # Write Slack Message
@@ -150,6 +152,39 @@ without a redraft. This matters more under the tiny default than it did before:
 tiny cuts real content on purpose, and that line is the only way it comes back.
 Never preemptively keep something because they might want it.
 
+## Where it goes and who to tag (Slack MCP connected)
+
+When this session has the Slack MCP (`slack_search_users` and friends, loaded or
+deferred), use it to read, never to post. The user pastes every message
+themselves: anything posted through the MCP (`slack_send_message`,
+`slack_schedule_message`, `slack_send_message_draft`, its card) is stamped "Sent
+using Claude", which they don't want. Those tools may also be denied in their
+settings; don't try them.
+
+**Name the place, never "everyone".** First match wins:
+1. A Slack link the user gave for this message: that thread or channel.
+2. The thread or channel this conversation is plainly about (a pasted thread).
+3. One person and no channel: a DM to them.
+4. A channel named: find it with `slack_search_channels`.
+
+Still not sure, ask in one line ("DM Nick, or reply in the #hpy-api thread?").
+
+**Link it, so one click opens it in Slack.** Use the permalinks the read tools
+return:
+- Thread or message: the link the user gave, or the permalink from
+  `slack_search_public`. `slack_search_public_and_private` reaches DMs and private
+  channels, but ask the user before using it (its own description requires that).
+- Channel: the `Permalink` from `slack_search_channels`.
+- DM: the person's `Permalink` from `slack_search_users`. It opens their profile,
+  where Message is one click.
+
+**Every `@person` resolves to one real person.** Look each one up with
+`slack_search_users`. Several match: keep the one who is in the destination
+(`slack_list_channel_members`); still several or none, ask. Write `@` plus the
+name Slack autocompletes for them. A pasted `@name` may stay plain text, so the
+report line names each person to tag, linked to their profile, and they retype `@`
+and pick that person.
+
 ## Output
 
 1. **Where to save — the folder decides.** Check once with `test -d`, then:
@@ -176,13 +211,17 @@ Never preemptively keep something because they might want it.
    onboarding, no state tracking. It fires when the overwrite actually costs
    something, stays silent on a first draft for that person, and never fires
    again once the folder exists.
-2. **`<recipient>`**: first name, lowercase (`dmytro`), or `everyone` for a
-   channel or broadcast post. Several people named? Use the one who has to act.
+2. **`<recipient>`**: first name, lowercase (`dmytro`), or the channel name
+   (`hpy-eng`) for a channel or thread post. Several people named? Use the one
+   who has to act. `everyone` only when there's no Slack MCP to find the channel.
    No dates, no ticket keys, no full sentences in the filename.
 3. The file contains ONLY the Slack message, no preamble or instructions.
 4. **The file IS the delivery. Never paste the draft into the chat reply.** Say
    it's saved, give the path, stop. Pasting it inline makes the user read the
-   same message twice.
+   same message twice. With the Slack MCP, the report line also says where to
+   post it and who to tag, both linked: "Saved nick-1014-1530.md. Reply in the
+   [#hpy-api thread on PR 2886](https://…/p1760467200123456); tag
+   [Nick Conn](https://…/team/U081C53KT0T)."
 5. **Start nothing.** In folder mode this plugin's `/slack-drafts` pane
    sees the save, opens its pane and sends the draft to the phone page on its
    own. Mention `/slack-drafts` once in the report line only if the user seems
