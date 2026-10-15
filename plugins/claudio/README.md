@@ -179,11 +179,11 @@ Drafts a Slack message ready to paste, business-casual, with **no sentence cap**
 
 **Where it saves.** `~/Desktop/slack-message-for-<recipient>.md` by default, overwriting the previous draft for that person. Create `~/Desktop/slack-drafts/` and it switches to timestamped files in there instead, so rewriting a message stops destroying the version it replaces. The folder's existence is the opt-in and the skill never creates it for you. A redraft to the same person moves the draft it supersedes to the Trash, so the pane only shows the current one.
 
-**Reading drafts back.** `/slack-drafts` opens a pane of every draft with **Copy for Slack** (an HTML clipboard copy, so `[label](url)` pastes as a real link) and delete, and its optional phone page brings the same copy to your iPhone. See [Mods](#mods).
+**Reading drafts back.** `/slack-drafts` opens a pane of every draft with **Copy for Slack** (an HTML clipboard copy, so `[label](url)` pastes as a real link) and delete. See [Mods](#mods).
 
-**With the Slack MCP connected**, the draft also carries where it goes (a thread from a link you gave, a DM, or a channel; it asks when unsure) and resolves every `@person` to their Slack user ID, so tags post as real mentions instead of plain `@Nick` text. The report line says where it will post and who it tags. Nothing posts without your approval of that exact draft: the pane's **Send to Slack** button at the desk, or, on the phone, a yes to "Send to …?" after the skill shows you the message. The first time, it offers to add `permissions.ask` rules for the Slack send and schedule tools, so Claude Code itself prompts before any send Claude makes, even in auto mode.
+**With the Slack MCP connected**, the draft also carries where it goes (a thread from a link you gave, a DM, or a channel; it asks when unsure) and resolves every `@person` to their Slack user ID, so tags post as real mentions instead of plain `@Nick` text. The report line says where it will post and who it tags. Nothing posts without your approval of that exact draft: at the desk, the pane's **Send to Slack** button and the permission prompt after it; on the phone, the skill puts it in Slack's own Drafts (`slack_send_message_draft`) and you send it from Slack. The first time, it offers to add `permissions.ask` rules for the Slack send and schedule tools, so Claude Code prompts before any send, even in auto mode (where the pane's Send needs that rule to work at all), and a `permissions.allow` rule for `slack_send_message_draft`, which never sends and which auto mode otherwise refuses.
 
-**On a phone** without the Slack MCP, say so and the reply links the Slack Drafts phone page instead of the file path.
+**On a phone** without the Slack MCP, the reply carries the message as plain text to copy.
 
 Auto-triggers on phrases like "draft a slack message", "how should I phrase this for slack", "write up a slack post".
 
@@ -345,33 +345,17 @@ Off by default, since another plugin's band (a skin, say) may want that spot: tu
 
 ### `/slack-drafts`
 
-A pane for the drafts `/write-slack-message` saves to `~/Desktop/slack-drafts/`, plus an optional phone page so you can paste them from your iPhone with Slack formatting intact.
+A pane for the drafts `/write-slack-message` saves to `~/Desktop/slack-drafts/`.
 
 - `/slack-drafts` opens the pane: one card per draft, newest first, rendered as Markdown.
 - Saving a draft opens the pane on its own, and a save or delete in any session shows in every open pane within a few seconds.
-- **Send to Slack** shows on a draft that names its destination (the skill adds it when the Slack MCP is connected). It posts through the Slack MCP with `@Name` swapped for `<@ID>`, then moves the draft to the Trash. The click is the approval: the mod asks for no tool permission, and a desktop pane button takes two clicks anyway.
+- **Send to Slack** shows on a draft that names its destination (the skill adds it when the Slack MCP is connected). It posts through the Slack MCP with `@Name` swapped for `<@ID>`, then moves the draft to the Trash. The send still goes through your permission rules: with a `permissions.ask` rule on `slack_send_message` you get a prompt to confirm; in auto mode without one, the classifier refuses it and a toast says so.
 - **Copy for Slack** puts an HTML version on the Mac clipboard (via `osascript`), so `[label](url)` pastes as a link and backticks as code. **Delete** moves the file to the Trash.
 - `SLACK_DRAFTS_DIR` overrides the folder.
 
-**On your phone.** Slack on iOS only keeps formatting when the clipboard carries HTML, which the Claude app cannot put there for a mod. So drafts are mirrored to a private claude.ai artifact ([`slack-drafts-phone/index.html`](slack-drafts-phone/index.html)) whose **Copy for Slack** button does that copy in the browser. Each save, delete or `/slack-drafts` appends rows to that artifact's database through the `ArtifactData` tool (approve it once). The page shows the newest row per draft and tidies the rest.
-
-Set it up once per account:
-
-1. Publish `slack-drafts-phone/index.html` as an artifact with `slack-drafts-phone/slack-html.js` beside it and capabilities `{"db": {"rules": [{"path": "drafts", "read": "owner", "write": "owner"}]}, "user": {}}` (ask Claude to do it).
-2. Put its URL in the plugin's **Slack drafts phone page** option (`/config`, or `pluginConfigs["claudio@claudio"].options.phoneUrl` in `~/.claude/settings.json`).
-3. Pin the page in claude.ai so it is one tap away on the phone.
-
-Leave the option empty to skip the phone copy.
-
 ### Developing the mods
 
-`slack-drafts-phone/slack-html.js` is built from `hooks/slack-html.ts`, so the pane and the page share one converter. From `plugins/claudio`, after changing it:
-
-```
-npx esbuild@0.24.2 hooks/slack-html.ts --bundle --format=iife --global-name=SlackHtml --target=es2020 --outfile=slack-drafts-phone/slack-html.js
-```
-
-Then republish the artifact with the new `slack-html.js`. Check any hooks change with:
+From `plugins/claudio`, check any hooks change with:
 
 ```
 claude plugin validate .

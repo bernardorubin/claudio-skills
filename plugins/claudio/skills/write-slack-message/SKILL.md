@@ -4,11 +4,12 @@ description: >-
   Use when the user asks to draft, write, format, or compose a Slack message. Triggers
   on "write a slack message", "draft a slack post", "how should I phrase this for
   slack", "send this on slack", or any request to format text for Slack. Saves a copy-
-  paste-ready draft to ~/Desktop/slack-drafts/ (shown in the /slack-drafts pane and
-  on the Slack Drafts phone page), falling back to
+  paste-ready draft to ~/Desktop/slack-drafts/ (shown in the /slack-drafts pane),
+  falling back to
   ~/Desktop/slack-message-for-<recipient>.md. With the Slack MCP connected it resolves
   where the message goes and every @mention to a Slack ID, so the pane's Send button
-  (or the user's yes, on the phone) posts it. Never posts without that approval.
+  posts it, or, on the phone, it lands in Slack's own drafts for the user to send.
+  Never posts without the user's approval.
 ---
 
 # Write Slack Message
@@ -161,17 +162,24 @@ folder (folder mode, below). Then the draft carries where it goes, and the
 `/slack-drafts` pane shows a **Send to Slack** button that posts it. Without either,
 skip this section: the draft stays copy-paste only.
 
-**First, once per install: the safety rule.** Check that `permissions.ask` in
-`~/.claude/settings.json` lists `mcp__<server>__slack_send_message` and
-`mcp__<server>__slack_schedule_message` (the server as this session's tool names
-spell it). An `ask` rule makes Claude Code prompt before any send you make, in every
-permission mode, auto included; the pane's Send button is the user's own click and
-stays one click. Both listed, or `~/.config/claudio/slack-ask-declined` exists → go on.
-Otherwise ask once, in one line: "Add a rule so Claude can never post to Slack without
-asking you first?" On yes, add both to the `ask` array with the Edit tool (merge into
-the array, never replace it; edit in place, since the file may be a symlink), then
-check it parses with `jq -e .permissions.ask`. On no, `touch` that declined file so
-it is never asked again.
+**First, once per install: the Slack rules.** Check `~/.claude/settings.json` (the
+server as this session's tool names spell it):
+
+- `permissions.ask` lists `mcp__<server>__slack_send_message` and
+  `mcp__<server>__slack_schedule_message`. An `ask` rule makes Claude Code prompt
+  before any send, in every permission mode, auto included. It is also what lets the
+  pane's Send button work in auto mode: without it the classifier refuses a send the
+  user started from the pane.
+- `permissions.allow` lists `mcp__<server>__slack_send_message_draft`. A Slack draft
+  never sends, and auto mode's classifier otherwise refuses it, which breaks the
+  phone path below.
+
+All three listed, or `~/.config/claudio/slack-rules-declined` exists → go on.
+Otherwise ask once, in one line: "Add Slack rules so Claude always asks before
+sending, and can leave drafts in your Slack Drafts?" On yes, add the missing ones
+with the Edit tool (merge into each array, never replace it; edit in place, since the
+file may be a symlink), then check it parses with `jq -e .permissions`. On no,
+`touch` that declined file so it is never asked again.
 
 **Where it goes**, first match wins:
 1. A Slack link the user gave for this message. `https://<ws>.slack.com/archives/<C>/p<16 digits>`
@@ -207,21 +215,26 @@ slack_mentions: @Nick=U0456DEF, @Grace=U0789GHI
 `slack_server` is the part of the tool name between `mcp__` and `__slack_send_message`.
 `slack_channel` is the user ID for a DM. Leave out `slack_thread` unless it is a
 reply. `slack_to` is the place as a human reads it. Values only, no comments on the
-lines. The pane strips it from what it shows, copies and sends to the phone page.
+lines. The pane strips it from what it shows and copies.
 
 **Nothing posts without the user's approval of this exact draft.** Two ways to approve,
 and nothing else counts:
 
-- **At the desk: the pane's Send to Slack button.** The click is the approval and the
-  pane posts it. You call nothing.
-- **Away from the desk** (they say they're on their phone or away, or ask you to send
-  it): ask first. Show the message exactly as it will post, as plain text (they can't
-  approve what they can't read, and there is no pane on the phone), then one line with
-  the destination and who it tags. End the turn on one question, "Send to the #hpy-eng
-  thread, tagging Nick?", with Send and Not now buttons. Only a yes to that question
-  sends: `slack_send_message` with the front matter's channel and thread, every mapped
-  `@Name` replaced by `<@ID>`. Then move the draft to `~/.Trash/` and reply with the
-  message link the tool returns.
+- **At the desk: the pane's Send to Slack button.** The click asks for the send and
+  the safety rule's prompt confirms it. You call nothing.
+- **Away from the desk** (they say they're on their phone or away): put it in Slack's
+  own drafts with `slack_send_message_draft` (the front matter's channel and thread,
+  every mapped `@Name` replaced by `<@ID>`). It never sends: it shows up in their
+  Slack under Drafts & Sent, where they read it and tap Send themselves. Move the local
+  draft to `~/.Trash/` so the pane can't post it a second time, and reply with the
+  `channel_link` the tool returns.
+- **The Slack draft fails** (`attached_draft_exists`: a draft already sits in that
+  channel; `not_in_channel`), **or they ask you to send it**: ask in the chat. Show the
+  message exactly as it will post, as plain text, then one line with the destination
+  and who it tags. End the turn on one question, "Send to the #hpy-eng thread, tagging
+  Nick?", with Send and Not now buttons. Only a yes sends: `slack_send_message` with the
+  same arguments (the safety rule prompts once more), then move the local draft to
+  `~/.Trash/` and reply with the message link.
 
 "Send this on slack" in the request is not a yes: they haven't seen the draft yet. A
 yes covers that draft only, so a redraft asks again. A no, or anything but a yes,
@@ -264,37 +277,26 @@ leaves the draft in the folder.
    posts it and who it tags: "Saved nick-1014-1530.md. Send posts it to the
    #hpy-eng thread on PR 2886, tagging Nick (U0456DEF)."
 5. **Start nothing.** In folder mode this plugin's `/slack-drafts` pane
-   sees the save, opens its pane and sends the draft to the phone page on its
-   own. Mention `/slack-drafts` once in the report line only if the user seems
+   sees the save and opens on its own. Mention `/slack-drafts` once in the report line only if the user seems
    not to know where drafts show up.
 6. Below that, one line naming what you cut, so they can add it back.
 
 ### On a phone
 
-**Slack MCP connected:** the away-from-the-desk approval above. That is the one
-time the draft appears in the chat.
+**Slack MCP connected:** the away-from-the-desk path above (a Slack draft they send
+from Slack).
 
-**Otherwise, link the Slack Drafts page.** The draft never goes in the chat: no
-code block, no inline copy. Saving it is what sends it to the `/slack-drafts`
-pane on the desktop and to the Slack Drafts phone page, whose Copy for Slack
-keeps links and code. So save exactly as above and change only the report line:
-link the phone page instead of giving the path. Its URL is the plugin's
-`phoneUrl` option:
-
-```bash
-jq -r '.pluginConfigs["claudio@claudio"].options.phoneUrl // empty' ~/.claude/settings.json
-```
-
-Empty means no phone page is set up: say the draft is saved and that the phone
-page needs its one-time setup (the plugin README's Mods section). The page only
-receives drafts saved in folder mode.
+**Otherwise** the phone has no pane and nothing to send through, so the chat is
+the only way the message reaches them: save as usual, then give the message as
+plain text in the reply so they can copy it. This is the one time a draft appears
+in the chat without a send question.
 
 ### Browsing past drafts (optional)
 
 This plugin's `/slack-drafts` pane shows them: it
 lists every draft newest first, with Send to Slack (drafts with a send target),
 Copy for Slack (an HTML clipboard copy, so `[label](url)` pastes as a real link)
-and delete. On the phone, its pinned Slack Drafts page does the same. Mention it only if
+and delete. Mention it only if
 the user asks how to find an older draft; the drafting flow above must work
 unchanged without it.
 

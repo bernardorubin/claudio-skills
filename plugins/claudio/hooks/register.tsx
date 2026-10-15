@@ -10,7 +10,7 @@ import { BAR_PX, BLUE, ROW_PX, bar, svgBar, timeLeft, tokens, tone } from './usa
 // one unmatched session.start hook, and never follows $ across an import, so
 // every hook and every helper that takes $ lives here.
 
-// ── slack-drafts: the /slack-drafts pane and the phone page copy ──
+// ── slack-drafts: the /slack-drafts pane ──
 
 const PANE = 'slack-drafts'
 const drafts = atom({ plugin: 'claudio', key: 'drafts' } as const, [])
@@ -47,7 +47,7 @@ const copyForSlack = async ($: EngineInterface, d: Draft) => {
 
 // ponytail: moved to ~/.Trash, not unlinked, so a misclick is recoverable from Finder
 // sentTo: where the draft just went, so one toast says both
-const trash = async ($: EngineInterface, d: Draft, url: string, sentTo?: string) => {
+const trash = async ($: EngineInterface, d: Draft, sentTo?: string) => {
   const to = `${await home($)}/.Trash/${d.name.replace(/\.md$/, '')} ${Date.now()}.md`
   const r = await $.process.run(['mv', d.path, to])
   const head = sentTo ? `Sent to ${sentTo}` : ''
@@ -56,16 +56,18 @@ const trash = async ($: EngineInterface, d: Draft, url: string, sentTo?: string)
       ? head || `Moved ${d.name} to the Trash`
       : `${head ? `${head}, but could` : 'Could'} not move ${d.name} to the Trash: ${r.stderr.trim()}`,
   )
-  await syncPhone($, url, await refresh($))
+  await refresh($)
 }
 
 // Paths already sent, so a second press (or a draft the Trash refused) never posts twice.
 // ponytail: module memory, so a mod reload forgets it; the sent draft is in the Trash by then
 const sent = new Set<string>()
 
-// The click is the send: $.mcp.call raises no permission prompt, and the desktop's
-// two-click pane buttons make a stray single click harmless.
-const sendToSlack = async ($: EngineInterface, d: Draft, url: string) => {
+// The click asks for the send; the person's permission rules decide it. A
+// `permissions.ask` rule on slack_send_message puts it to a dialog in every mode;
+// without one, auto mode's classifier refuses it (no prompt asked for it) and the
+// toast says so.
+const sendToSlack = async ($: EngineInterface, d: Draft) => {
   const s = d.slack
   if (!s) return
   if (sent.has(d.path)) return $.ui.toast(`Already sent to ${s.to}`)
@@ -79,49 +81,21 @@ const sendToSlack = async ($: EngineInterface, d: Draft, url: string) => {
     .catch((err: unknown) => ({ isError: true, content: [{ type: 'text', text: String(err) }] }))
   if (r.isError) {
     sent.delete(d.path)
-    const why = r.content.map(b => b.text ?? '').join(' ').trim().slice(0, 160) || 'no reason given'
-    return $.ui.toast(`Not sent: ${why}. Copy for Slack still works.`)
+    const why = r.content.map(b => b.text ?? '').join(' ').trim()
+    return $.ui.toast(
+      /classifier/i.test(why)
+        ? 'Not sent: auto mode cannot approve a send from the pane. Add the Slack ask rule (write-slack-message offers it) and Send will ask you instead.'
+        : `Not sent: ${why.slice(0, 160) || 'no reason given'}. Copy for Slack still works.`,
+    )
   }
-  await trash($, d, url, s.to)
-}
-
-// The phone page (an artifact with a db) gets an append-only copy: a new row per
-// save and a tombstone per delete; the page shows the newest row per draft and
-// tidies the rest. Every row id carries the push time, so a re-push (a fresh
-// install starts with an empty `synced` record) adds a duplicate the page folds
-// away instead of colliding with an existing row, which the store refuses
-// without its version.
-const docId = (name: string, at: number) =>
-  `${name.replace(/\.md$/, '').replace(/[^A-Za-z0-9_.~:@+-]/g, '_')}-${Math.round(at)}`
-
-// Returns what happened, for /slack-drafts to say; failures also toast.
-const syncPhone = async ($: EngineInterface, url: string, list: Draft[]): Promise<string> => {
-  if (!url) return 'phone page off (set its URL in /config)'
-  const synced = ((await $.store.get('synced')) ?? {}) as Record<string, number>
-  const now = Date.now()
-  const changed = list.filter(d => synced[d.name] !== d.mtimeMs)
-  const gone = Object.keys(synced).filter(name => !list.some(d => d.name === name))
-  if (changed.length === 0 && gone.length === 0) return 'phone page up to date'
-  const writes = [
-    ...changed.map(d => ({ op: 'set' as const, collection: 'drafts', doc_id: docId(d.name, now), data: { name: d.name, md: d.text, savedAt: d.mtimeMs } })),
-    ...gone.map(name => ({ op: 'set' as const, collection: 'drafts', doc_id: docId(name, now), data: { name, deleted: true, savedAt: now } })),
-  ]
-  const r = await $.tool.call({ tool: 'ArtifactData', action: 'batch', url, writes })
-  if (r.deny !== undefined || r.isError) {
-    const why = (r.deny ?? r.text ?? 'no reason given').slice(0, 160)
-    $.ui.toast(`Phone sync failed: ${why}`)
-    return `phone sync failed: ${why}`
-  }
-  const next = Object.fromEntries(list.map(d => [d.name, d.mtimeMs]))
-  await $.store.set('synced', next)
-  return `sent ${writes.length} change${writes.length === 1 ? '' : 's'} to the phone page`
+  await trash($, d, s.to)
 }
 
 const open = ($: EngineInterface, focus: boolean) =>
   $.ui.open({ id: PANE, title: 'Slack drafts', closeOnEscape: true, ...(focus ? { focus: true as const } : {}) })
 
 const startSlackDrafts = async ($: EngineInterface) => {
-  await $.command.register({ name: 'slack-drafts', description: 'Show your Slack drafts in a pane and send new ones to the phone page' })
+  await $.command.register({ name: 'slack-drafts', description: 'Show your Slack drafts in a pane' })
   await refresh($)
   // Each session holds its own list, so a save or delete made in another session
   // shows here on the next tick. ponytail: a 3s poll of one small folder; a file
@@ -164,7 +138,6 @@ const startUsageBars = async ($: EngineInterface) => {
 }
 
 export const register: Register = (on, options) => {
-  const phoneUrl = String(options.phoneUrl ?? '')
   const showUsage = options.usageBars === true
 
   on('session.start', async ($, e, next) => {
@@ -178,20 +151,18 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'slack-drafts' }, async $ => {
     const list = await refresh($)
     await open($, true)
-    const phone = await syncPhone($, phoneUrl, list)
-    return { text: `${list.length} draft${list.length === 1 ? '' : 's'} in the pane, ${phone}.` }
+    return { text: `${list.length} draft${list.length === 1 ? '' : 's'} in the pane.` }
   })
 
   // A draft written by any tool (Write, Edit, a Bash heredoc) refreshes the list,
   // and a new or changed one opens the pane.
   on('tool.call', async ($, e, next) => {
-    if (e.tool === 'ArtifactData' || !JSON.stringify(e).includes('slack-drafts')) return next(e)
+    if (!JSON.stringify(e).includes('slack-drafts')) return next(e)
     // read before the tool runs, or the poll could see the new draft first and keep the pane shut
     const newest = (await read($, drafts))[0]?.mtimeMs ?? 0
     const ran = await next(e)
     const list = await refresh($)
     if ((list[0]?.mtimeMs ?? 0) > newest) void open($, false)
-    await syncPhone($, phoneUrl, list)
     return ran
   }).catch(($, e, next) => next(e)) // never block a tool call; next replays its result
 
@@ -218,9 +189,9 @@ export const register: Register = (on, options) => {
               {d.slack && <Text dimColor wrap="truncate-end">To {d.slack.to}</Text>}
               <Markdown text={d.text} />
               <Box gap={1} flexWrap="wrap">
-                {d.slack && <Button key={`send-${d.name}`} label="Send to Slack" variant="primary" onPress={() => sendToSlack($, d, phoneUrl)} />}
+                {d.slack && <Button key={`send-${d.name}`} label="Send to Slack" variant="primary" onPress={() => sendToSlack($, d)} />}
                 <Button key={`copy-${d.name}`} label="Copy for Slack" {...(d.slack ? {} : { variant: 'primary' as const })} onPress={() => copyForSlack($, d)} />
-                <Button key={`del-${d.name}`} label="Delete" plain dimColor onPress={() => trash($, d, phoneUrl)} />
+                <Button key={`del-${d.name}`} label="Delete" plain dimColor onPress={() => trash($, d)} />
               </Box>
             </Box>
           )

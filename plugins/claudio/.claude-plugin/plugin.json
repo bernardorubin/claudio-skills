@@ -11,12 +11,6 @@
   "license": "MIT",
   "types": "./types/index.d.ts",
   "userConfig": {
-    "phoneUrl": {
-      "type": "string",
-      "title": "Slack drafts phone page",
-      "description": "The claude.ai artifact URL of your Slack Drafts phone page. Each saved draft is copied there so you can paste it from your phone. Empty turns it off.",
-      "default": ""
-    },
     "usageBars": {
       "type": "boolean",
       "title": "Usage bars",

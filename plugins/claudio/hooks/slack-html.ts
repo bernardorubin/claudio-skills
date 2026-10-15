@@ -71,31 +71,6 @@ export const toHtml = (md: string) => {
   return out.join('')
 }
 
-// Markdown to plain text, for a plain-text paste (the phone), where iOS Slack
-// converts nothing. Links collapse to the bare URL, fence/quote markers and backticks go.
-export const toPlain = (md: string) => {
-  const out: string[] = []
-  let inCode = false
-  for (const raw of md.split(/\r?\n/)) {
-    if (raw.trimStart().startsWith('```')) {
-      inCode = !inCode
-      continue
-    }
-    if (inCode) {
-      out.push(raw)
-      continue
-    }
-    const line = raw.replace(/^(\s*)>\s?/, '$1')
-    out.push(
-      line
-        .split(CODE_SPAN)
-        .map((part, i) => (i % 2 ? part : part.replace(LINK, (_, _label: string, url: string) => url)))
-        .join(''),
-    )
-  }
-  return out.join('\n').trim() + '\n'
-}
-
 const hex = (s: string) => [...new TextEncoder().encode(s)].map(b => b.toString(16).padStart(2, '0')).join('')
 
 const literal = (s: string) => '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '" & linefeed & "') + '"'

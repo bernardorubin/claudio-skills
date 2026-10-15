@@ -16,7 +16,6 @@ claudio-skills/                       # repo folder; the plugin inside is named 
 │       ├── agents/                   # subagents as .md files (optional)
 │       ├── hooks/                    # function-hooks mods: usage band + /slack-drafts pane (register.tsx)
 │       ├── types/                    # the mods' $.state contract
-│       ├── slack-drafts-phone/       # phone artifact page; slack-html.js is built from hooks/slack-html.ts
 │       ├── README.md                 # user-facing plugin docs
 │       └── comparison.png            # asset referenced by README
 └── README.md                         # marketplace overview, install instructions
