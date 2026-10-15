@@ -38,11 +38,12 @@ if [ -f ~/.config/claudio/vaults.json ]; then
 fi
 ```
 
-- **Period**: end = today (`date +%F`) unless the user names a week. Start = the day
-  after the previous summary's end, found from the newest
-  `~/Desktop/weekly-summaries/<project>-week-ending-*.html`; with none, start = end − 6
-  days and `previousEnd` is null. A gap longer than 14 days: ask whether to cover all
-  of it or just the last 7.
+- **Period**: always a full week. End = today (`date +%F`) unless the user names a
+  week; start = end − 6 days, every run. Never shorten it to start after the previous
+  summary: a run on Wednesday covers Thursday to Wednesday even if the last one ended
+  Thursday, so the two overlap. `previousEnd` is the end date of the newest
+  `~/Desktop/weekly-summaries/<project>-week-ending-*.html` (null when there is none);
+  it only feeds the page's "previous summary closed" note.
 
 ## Step 2 — Gather (in parallel where independent)
 
@@ -149,7 +150,7 @@ naming the project and period). The page already follows the artifact page contr
 so no redesign pass. No Artifact tool in this session: `open "$OUT"` instead.
 
 Reply with the link, the counts line (releases / shipped / open), and anything that
-was blocked or skipped. The local HTML is also the marker the next run reads for
+was blocked or skipped. The local HTML is also where the next run reads
 `previousEnd`, so always write it.
 
 ## What "done" looks like
