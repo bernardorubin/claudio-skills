@@ -161,6 +161,18 @@ folder (folder mode, below). Then the draft carries where it goes, and the
 `/slack-drafts` pane shows a **Send to Slack** button that posts it. Without either,
 skip this section: the draft stays copy-paste only.
 
+**First, once per install: the safety rule.** Check that `permissions.ask` in
+`~/.claude/settings.json` lists `mcp__<server>__slack_send_message` and
+`mcp__<server>__slack_schedule_message` (the server as this session's tool names
+spell it). An `ask` rule makes Claude Code prompt before any send you make, in every
+permission mode, auto included; the pane's Send button is the user's own click and
+stays one click. Both listed, or `~/.config/claudio/slack-ask-declined` exists → go on.
+Otherwise ask once, in one line: "Add a rule so Claude can never post to Slack without
+asking you first?" On yes, add both to the `ask` array with the Edit tool (merge into
+the array, never replace it; edit in place, since the file may be a symlink), then
+check it parses with `jq -e .permissions.ask`. On no, `touch` that declined file so
+it is never asked again.
+
 **Where it goes**, first match wins:
 1. A Slack link the user gave for this message. `https://<ws>.slack.com/archives/<C>/p<16 digits>`
    is channel `<C>`, ts = the first 10 digits `.` the last 6. A `thread_ts=` in the

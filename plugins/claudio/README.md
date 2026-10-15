@@ -181,7 +181,7 @@ Drafts a Slack message ready to paste, business-casual, with **no sentence cap**
 
 **Reading drafts back.** `/slack-drafts` opens a pane of every draft with **Copy for Slack** (an HTML clipboard copy, so `[label](url)` pastes as a real link) and delete, and its optional phone page brings the same copy to your iPhone. See [Mods](#mods).
 
-**With the Slack MCP connected**, the draft also carries where it goes (a thread from a link you gave, a DM, or a channel; it asks when unsure) and resolves every `@person` to their Slack user ID, so tags post as real mentions instead of plain `@Nick` text. The report line says where it will post and who it tags. Nothing posts without your approval of that exact draft: the pane's **Send to Slack** button at the desk, or, on the phone, a yes to "Send to …?" after the skill shows you the message.
+**With the Slack MCP connected**, the draft also carries where it goes (a thread from a link you gave, a DM, or a channel; it asks when unsure) and resolves every `@person` to their Slack user ID, so tags post as real mentions instead of plain `@Nick` text. The report line says where it will post and who it tags. Nothing posts without your approval of that exact draft: the pane's **Send to Slack** button at the desk, or, on the phone, a yes to "Send to …?" after the skill shows you the message. The first time, it offers to add `permissions.ask` rules for the Slack send and schedule tools, so Claude Code itself prompts before any send Claude makes, even in auto mode.
 
 **On a phone** without the Slack MCP, say so and the reply links the Slack Drafts phone page instead of the file path.
 
