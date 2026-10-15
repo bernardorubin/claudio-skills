@@ -108,6 +108,16 @@ const nudgeVault = async ($: EngineInterface) => {
   await $.store.set('vaultNudged', true)
 }
 
+// An update skips the install screen that lists new options, so the pet says so once.
+// ponytail: one toast per install, and only while the Pet option is off
+const nudgePet = async ($: EngineInterface) => {
+  if (await $.store.get('petNudged')) return
+  $.ui.toast('claudio: turn on the new Pet option in /config to see whether Claude is working, waiting on you, or needs you', {
+    timeoutMs: 15_000,
+  })
+  await $.store.set('petNudged', true)
+}
+
 // ── usage-bars: the context and 5-hour limit band above the prompt ──
 
 const snap = atom({ plugin: 'claudio', key: 'snap' } as const, null)
@@ -160,7 +170,7 @@ export const register: Register = (on, options) => {
     const ran = await next(e)
     // one mod failing to start must not keep the others from starting
     const failed = (
-      await Promise.allSettled([startSlackDrafts($), showUsage && startUsageBars($), showPet && startPet($), nudgeVault($)])
+      await Promise.allSettled([startSlackDrafts($), showUsage && startUsageBars($), showPet && startPet($), nudgeVault($), !showPet && nudgePet($)])
     ).find(r => r.status === 'rejected')
     if (failed) throw failed.reason
     return ran

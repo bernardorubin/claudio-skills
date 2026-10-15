@@ -76,3 +76,22 @@ test('shows working, your turn, and needs you while a question or a permission d
   expect(await ran.find({ type: 'Text', text: 'Working' })).toBeDefined()
   await ran.unmount()
 })
+
+test('points at the Pet option once while it is off', async ($, on) => {
+  mock.store(on)
+  const toasts: string[] = []
+  on('env.get', () => ({ value: '/Users/test' }))
+  on('fs.list', () => ({ value: [] }))
+  on('fs.read', () => ({ value: '{}' }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('ui.toast', ($, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  const start = () => $.session.start({ cwd: '/Users/test', surface: 'terminal', isInteractive: true })
+  await start()
+  await start()
+  expect(toasts.filter(t => t.includes('Pet option')).length).toBe(1)
+})

@@ -35,5 +35,5 @@ test('stays quiet when a vault registry already exists', async ($, on) => {
   on('session.start', () => ({ cwd: '/Users/test' }))
 
   await $.session.start({ cwd: '/Users/test', surface: 'terminal', isInteractive: true })
-  expect(toasts.length).toBe(0)
+  expect(toasts.filter(t => t.includes('/vault-init')).length).toBe(0)
 })
