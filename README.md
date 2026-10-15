@@ -67,7 +67,7 @@ See [`plugins/claudio/README.md`](plugins/claudio/README.md) for full details on
 
 Two function-hook mods ship inside `claudio`, so there is nothing extra to install:
 
-- **Usage band**: two bars above the prompt (terminal and desktop Code tab), context window used and what's left of the 5-hour rate-limit window, orange then red as each nears its limit. Off by default; turn on the plugin's **Usage bars** option in `/config`. A separate **Pet** option adds a pixel pet on the band's right edge: blue while Claude works, green on your turn, orange when it waits on an approval or an answer.
+- **Usage band**: two bars above the prompt (terminal and desktop Code tab), context window used and what's left of the 5-hour rate-limit window, orange then red as each nears its limit. Off by default; turn on the plugin's **Usage bars** option in `/config`. A separate **Pet** option adds a pixel pet on the band's right edge: blue and acting out the running tool (reading glasses, a pencil, a hammer) while Claude works, green on your turn, orange when it waits on an approval or an answer; it grows with the context, suggests `/compact` or `/clear` as it fills, and tires near the 5-hour limit.
 - **`/slack-drafts`**: a pane for the drafts `/write-slack-message` saves, with a copy button that keeps Slack links and code, and an optional private phone page to paste them from your iPhone.
 
 See [the plugin README's Mods section](plugins/claudio/README.md#mods) for the one-time phone setup.

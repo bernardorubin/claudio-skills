@@ -347,11 +347,13 @@ Off by default, since another plugin's band (a skin, say) may want that spot: tu
 
 A small pixel pet on the band's right edge, showing at a glance whether Claude needs you:
 
-- **Working** (blue): hops and looks around while a turn runs.
+- **Working** (blue): acts out the running tool. Thinking (no tool) hops with thought dots; Read, Grep, Glob and web fetches put on glasses and read a turning book; Edit and Write scribble with a pencil; Bash and every other tool swing a hammer.
 - **Your turn** (green): smiles and blinks now and then once the turn is done.
 - **Needs you** (orange): open mouth and a flashing "!" while a permission dialog, a question (AskUserQuestion) or a plan to approve (ExitPlanMode) waits on you.
 
-Desktop draws an animated SVG (still under reduced motion); the terminal draws a one-row text sprite, `( •_•)` stepping every half second. It shows with or without the usage bars, and gives way when the band is too narrow for both. An approved command keeps "Needs you" until it finishes, since no event marks the moment a dialog is approved. Off by default: turn on the **Pet** option in `/config`, or set `pluginConfigs["claudio@claudio"].options.pet` to `true`. While it's off, one toast per install points at it, since an update skips the install screen that lists new options.
+It also wears the session's numbers, on the band's own thresholds: it grows wider at 60% and 85% context, and on your turn past 60% it says `Context N% full: try /compact or /clear`. Past 75% of the 5-hour window it gets tired: heavy lids, everything at half speed, and a "z" while it waits.
+
+Desktop draws an animated SVG (still under reduced motion); the terminal draws a one-row text sprite (`( •_•)📖`, `(=‿=)z`) stepping every half second. It shows with or without the usage bars, and gives way when the band is too narrow for both. An approved command keeps "Needs you" until it finishes, since no event marks the moment a dialog is approved. Off by default: turn on the **Pet** option in `/config`, or set `pluginConfigs["claudio@claudio"].options.pet` to `true`. While it's off, one toast per install points at it, since an update skips the install screen that lists new options.
 
 ### `/slack-drafts`
 

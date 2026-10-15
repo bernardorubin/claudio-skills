@@ -3,7 +3,7 @@ import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit }
 
 import type { Draft, UsageSnap } from '../types'
 import { clipboardScript, labelOf, splitDraft } from './slack-html'
-import { CAPTION, PET_PX, moodOf, petColor, petFrame, petSvg } from './pet'
+import { captionOf, lookOf, moodOf, petColor, petFrame, petPx, petSvg } from './pet'
 import { BAR_PX, BLUE, ROW_PX, bar, svgBar, timeLeft, tokens, tone } from './usage-bars'
 
 // Two mods in one module: the engine loads one hooks module per plugin, allows
@@ -146,6 +146,8 @@ const startUsageBars = async ($: EngineInterface) => {
 // plan to approve), or null.
 const blockedOn = atom({ plugin: 'claudio', key: 'blocked' } as const, null)
 const petTick = atom({ plugin: 'claudio', key: 'tick' } as const, 0)
+// The tool running now, which picks the pet's prop (glasses and a book, a pencil, a hammer).
+const runningTool = atom({ plugin: 'claudio', key: 'tool' } as const, null)
 
 const block = async ($: EngineInterface, tool: string) => {
   if ((await read($, blockedOn)) !== tool) await update($, blockedOn, () => tool)
@@ -170,7 +172,7 @@ export const register: Register = (on, options) => {
     const ran = await next(e)
     // one mod failing to start must not keep the others from starting
     const failed = (
-      await Promise.allSettled([startSlackDrafts($), showUsage && startUsageBars($), showPet && startPet($), nudgeVault($), !showPet && nudgePet($)])
+      await Promise.allSettled([startSlackDrafts($), (showUsage || showPet) && startUsageBars($), showPet && startPet($), nudgeVault($), !showPet && nudgePet($)])
     ).find(r => r.status === 'rejected')
     if (failed) throw failed.reason
     return ran
@@ -184,21 +186,27 @@ export const register: Register = (on, options) => {
   })
 
   // The one unmatched tool.call hook the engine allows, for both mods. The pet:
-  // a question or a plan to approve blocks until its call resolves, and any call
-  // clears a permission dialog's block on its tool. Slack drafts: a draft written
+  // the running tool picks its prop, a question or a plan to approve blocks until
+  // its call resolves, and any call clears a permission dialog's block on its
+  // tool. Slack drafts: a draft written
   // by any tool (Write, Edit, a Bash heredoc) refreshes the list, and a new or
   // changed one opens the pane.
   on('tool.call', async ($, e, next) => {
     const isDraft = e.tool !== 'ArtifactData' && JSON.stringify(e).includes('slack-drafts')
     if (!showPet && !isDraft) return next(e)
     if (showPet && (e.tool === 'AskUserQuestion' || e.tool === 'ExitPlanMode')) await block($, e.tool)
+    if (showPet) await update($, runningTool, () => e.tool)
     // read before the tool runs, or the poll could see the new draft first and keep the pane shut
     const newest = isDraft ? ((await read($, drafts))[0]?.mtimeMs ?? 0) : 0
     let ran
     try {
       ran = await next(e)
     } finally {
-      if (showPet) await unblock($, e.tool)
+      if (showPet) {
+        await unblock($, e.tool)
+        // ponytail: parallel calls hand the prop to whichever started last, and the first to end puts it down
+        if ((await read($, runningTool)) === e.tool) await update($, runningTool, () => null)
+      }
     }
     if (!isDraft) return ran
     const list = await refresh($)
@@ -260,7 +268,7 @@ export const register: Register = (on, options) => {
   }
 
   // ponytail: off unless usageBars or pet is on; another plugin's band may own that spot
-  if (showUsage) {
+  if (showUsage || showPet) {
     on('session.measure', async ($, e, next) => {
       await saveUsage($, e)
       return next(e)
@@ -270,7 +278,8 @@ export const register: Register = (on, options) => {
   if (showUsage || showPet) {
     on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
       if (e.props.hasSurvey) return next(e)
-      const s = showUsage ? await read($, snap) : null
+      const snapped = await read($, snap)
+      const s = showUsage ? snapped : null
       const mood = showPet ? moodOf((await read($, blockedOn)) !== null, e.props.isWorking) : null
       if (s === null && mood === null) return next(e)
 
@@ -325,8 +334,14 @@ export const register: Register = (on, options) => {
         )
       }
 
+      // The pet grows with the context and tires as the 5-hour window runs low.
+      const ctxPct = Math.round(snapped?.context.percent ?? 0)
+      const tool = mood === 'working' ? await read($, runningTool) : null
+      const look = lookOf(ctxPct, snapped?.fiveHour?.percentUsed ?? 0, tool)
+      const caption = mood === null ? '' : captionOf(mood, ctxPct)
+      const captionColor = mood === 'blocked' ? petColor(mood) : caption.includes('/compact') ? tone(ctxPct, 60, 85) : undefined
       // ponytail: the pet gives way when the band is too narrow for both
-      const petFits = mood !== null && (s === null || e.props.bodyColumns >= 84)
+      const petFits = mood !== null && (s === null || e.props.bodyColumns >= 70 + caption.length)
       // read only on the terminal, so the desktop's band never redraws on the tick
       const tick = petFits && Svg === null ? await read($, petTick) : 0
 
@@ -335,13 +350,13 @@ export const register: Register = (on, options) => {
           {s !== null && usage(s)}
           {petFits && (
             <Box key="pet" flexGrow={1} justifyContent="flex-end" alignItems="center" gap={1}>
-              <Text bold={mood === 'blocked'} color={mood === 'blocked' ? petColor(mood) : undefined} dimColor={mood !== 'blocked'}>
-                {CAPTION[mood]}
+              <Text bold={captionColor !== undefined} color={captionColor} dimColor={captionColor === undefined}>
+                {caption}
               </Text>
               {Svg ? (
-                <Svg source={petSvg(mood)} alt={`Claude: ${CAPTION[mood].toLowerCase()}`} width={PET_PX.width} height={PET_PX.height} isInteractive />
+                <Svg source={petSvg(mood, look)} alt={`Claude: ${caption}`} {...petPx(look)} isInteractive />
               ) : (
-                <Text color={petColor(mood)}>{petFrame(mood, tick)}</Text>
+                <Text color={petColor(mood)}>{petFrame(mood, look, tick)}</Text>
               )}
             </Box>
           )}

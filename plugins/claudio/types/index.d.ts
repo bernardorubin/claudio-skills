@@ -8,6 +8,6 @@ export type UsageSnap = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'claudio': { drafts: Draft[]; snap: UsageSnap | null; blocked: string | null; tick: number }
+    'claudio': { drafts: Draft[]; snap: UsageSnap | null; blocked: string | null; tick: number; tool: string | null }
   }
 }
