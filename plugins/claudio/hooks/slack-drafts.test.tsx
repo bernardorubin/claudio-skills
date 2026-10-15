@@ -89,3 +89,35 @@ test('drops a draft deleted from another session on the next poll', async ($, on
   expect(await after.find({ type: 'Text', text: 'No drafts yet' })).toBeDefined()
   await after.unmount()
 })
+
+test('trashes a draft deleted on the phone page and keeps one saved since', { options: { phoneUrl: 'https://claude.ai/artifact/x' } }, async ($, on) => {
+  mock.store(on)
+  const clock = mock.clock(on)
+  const GONE = 'nick-1014-1530.md'
+  const KEPT = 'dmytro-1008-1320.md'
+  const files = [
+    { name: GONE, kind: 'file' as const, size: 1, mtimeMs: 100, isLink: false },
+    { name: KEPT, kind: 'file' as const, size: 1, mtimeMs: 900, isLink: false },
+  ]
+  const rows = [
+    { id: 'nick-1014-1530-phone-500', data: { name: GONE, deleted: true, from: 'phone', savedAt: 500 }, version: 1 },
+    { id: 'dmytro-1008-1320-phone-500', data: { name: KEPT, deleted: true, from: 'phone', savedAt: 500 }, version: 1 },
+  ]
+  const moved: string[] = []
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', () => ({ value: files }))
+  on('fs.read', () => ({ value: DRAFT }))
+  on('process.run', ($, e) => {
+    if (e.argv[0] === 'mv') moved.push(String(e.argv[1]))
+    return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  on('ui.toast', () => ({ value: undefined }))
+  on('tool.check', () => ({ decision: 'allow' as const }))
+  on('tool.call', () => ({ result: {}, text: `2 documents:\n=== BEGIN ===\n${rows.map(r => JSON.stringify(r)).join('\n')}\n=== END ===` }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  await clock.advance(30_000)
+  expect(moved).toEqual([`${DIR}/${GONE}`])
+})
