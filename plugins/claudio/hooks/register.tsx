@@ -3,6 +3,7 @@ import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit }
 
 import type { Draft, UsageSnap } from '../types'
 import { clipboardScript, labelOf, splitDraft } from './slack-html'
+import { CAPTION, PET_PX, moodOf, petColor, petFrame, petSvg } from './pet'
 import { BAR_PX, BLUE, ROW_PX, bar, svgBar, timeLeft, tokens, tone } from './usage-bars'
 
 // Two mods in one module: the engine loads one hooks module per plugin, allows
@@ -129,14 +130,38 @@ const startUsageBars = async ($: EngineInterface) => {
   $.clock.every(60_000, () => void $.session.usage().then(u => saveUsage($, u)))
 }
 
+// ── pet: the band's right side, showing whether Claude works, waits on you, or is blocked ──
+
+// The tool whose call waits on the person (a permission dialog, a question, a
+// plan to approve), or null.
+const blockedOn = atom({ plugin: 'claudio', key: 'blocked' } as const, null)
+const petTick = atom({ plugin: 'claudio', key: 'tick' } as const, 0)
+
+const block = async ($: EngineInterface, tool: string) => {
+  if ((await read($, blockedOn)) !== tool) await update($, blockedOn, () => tool)
+}
+// ponytail: cleared by tool name, so two parallel calls of one tool both blocked clear together
+const unblock = async ($: EngineInterface, tool?: string) => {
+  const held = await read($, blockedOn)
+  if (held !== null && (tool === undefined || held === tool)) await update($, blockedOn, () => null)
+}
+
+// ponytail: steps the terminal's text sprite; the desktop's Svg animates itself and never reads it
+const startPet = async ($: EngineInterface) => {
+  $.clock.every(500, () => void update($, petTick, n => n + 1))
+}
+
 export const register: Register = (on, options) => {
   const phoneUrl = String(options.phoneUrl ?? '')
   const showUsage = options.usageBars === true
+  const showPet = options.pet === true
 
   on('session.start', async ($, e, next) => {
     const ran = await next(e)
     // one mod failing to start must not keep the others from starting
-    const failed = (await Promise.allSettled([startSlackDrafts($), showUsage && startUsageBars($), nudgeVault($)])).find(r => r.status === 'rejected')
+    const failed = (
+      await Promise.allSettled([startSlackDrafts($), showUsage && startUsageBars($), showPet && startPet($), nudgeVault($)])
+    ).find(r => r.status === 'rejected')
     if (failed) throw failed.reason
     return ran
   })
@@ -148,13 +173,24 @@ export const register: Register = (on, options) => {
     return { text: `${list.length} draft${list.length === 1 ? '' : 's'} in the pane, ${phone}.` }
   })
 
-  // A draft written by any tool (Write, Edit, a Bash heredoc) refreshes the list,
-  // and a new or changed one opens the pane.
+  // The one unmatched tool.call hook the engine allows, for both mods. The pet:
+  // a question or a plan to approve blocks until its call resolves, and any call
+  // clears a permission dialog's block on its tool. Slack drafts: a draft written
+  // by any tool (Write, Edit, a Bash heredoc) refreshes the list, and a new or
+  // changed one opens the pane.
   on('tool.call', async ($, e, next) => {
-    if (e.tool === 'ArtifactData' || !JSON.stringify(e).includes('slack-drafts')) return next(e)
+    const isDraft = e.tool !== 'ArtifactData' && JSON.stringify(e).includes('slack-drafts')
+    if (!showPet && !isDraft) return next(e)
+    if (showPet && (e.tool === 'AskUserQuestion' || e.tool === 'ExitPlanMode')) await block($, e.tool)
     // read before the tool runs, or the poll could see the new draft first and keep the pane shut
-    const newest = (await read($, drafts))[0]?.mtimeMs ?? 0
-    const ran = await next(e)
+    const newest = isDraft ? ((await read($, drafts))[0]?.mtimeMs ?? 0) : 0
+    let ran
+    try {
+      ran = await next(e)
+    } finally {
+      if (showPet) await unblock($, e.tool)
+    }
+    if (!isDraft) return ran
     const list = await refresh($)
     if ((list[0]?.mtimeMs ?? 0) > newest) void open($, false)
     await syncPhone($, phoneUrl, list)
@@ -195,61 +231,110 @@ export const register: Register = (on, options) => {
     )
   })
 
-  // ponytail: off unless the usageBars option is on; another plugin's band may own that spot
+  // A permission dialog blocks until its call resolves (tool.call above clears
+  // it); a turn that ends (an interrupt, a rejection) clears whatever is left.
+  // ponytail: no event marks the moment a dialog is approved, so an approved
+  // command still shows "Needs you" until it finishes
+  if (showPet) {
+    on('classic.PermissionRequest', async ($, e, next) => {
+      const r = await next(e)
+      // a settings hook that decided means no dialog is shown
+      if (r.decision === undefined) await block($, e.tool_name)
+      return r
+    }).catch(($, e, next) => next(e))
+
+    on('turn.complete', async ($, e, next) => {
+      if (e.agentId === undefined) await unblock($)
+      return next(e)
+    })
+  }
+
+  // ponytail: off unless usageBars or pet is on; another plugin's band may own that spot
   if (showUsage) {
     on('session.measure', async ($, e, next) => {
       await saveUsage($, e)
       return next(e)
     })
+  }
 
+  if (showUsage || showPet) {
     on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-      const s = await read($, snap)
-      if (e.props.hasSurvey || s === null) return next(e)
+      if (e.props.hasSurvey) return next(e)
+      const s = showUsage ? await read($, snap) : null
+      const mood = showPet ? moodOf((await read($, blockedOn)) !== null, e.props.isWorking) : null
+      if (s === null && mood === null) return next(e)
 
       const els = $.ui.resolve(e)
       const { Box, Text } = els
+      // checked by surface too: the test kit's terminal table carries an Svg the real terminal lacks
+      const Svg = e.surface !== 'terminal' && 'Svg' in els ? els.Svg : null
       const meter = (pct: number, color: string, alt: string) =>
-        'Svg' in els ? (
-          <els.Svg source={svgBar(pct, color)} alt={alt} width={BAR_PX} height={ROW_PX} />
+        Svg ? (
+          <Svg source={svgBar(pct, color)} alt={alt} width={BAR_PX} height={ROW_PX} />
         ) : (
           <Text color={color}>{bar(pct)}</Text>
         )
 
-      const ctxPct = Math.round(s.context.percent ?? 0)
-      const ctxTokens = s.context.tokens === undefined ? '—' : tokens(s.context.tokens)
-      const used = s.fiveHour?.percentUsed ?? 0
-      const left = Math.round(100 - used)
-      const ctxTone = tone(ctxPct, 60, 85)
-      const fiveTone = tone(used, 75, 90)
-      const alert = (c: string) => (c === BLUE ? undefined : c)
-      const fiveDetail =
-        s.fiveHour === null ? 'no reading yet' : `left · resets in ${timeLeft(s.fiveHour.resetsAt, s.now)}`
+      const usage = (s: UsageSnap) => {
+        const ctxPct = Math.round(s.context.percent ?? 0)
+        const ctxTokens = s.context.tokens === undefined ? '—' : tokens(s.context.tokens)
+        const used = s.fiveHour?.percentUsed ?? 0
+        const left = Math.round(100 - used)
+        const ctxTone = tone(ctxPct, 60, 85)
+        const fiveTone = tone(used, 75, 90)
+        const alert = (c: string) => (c === BLUE ? undefined : c)
+        const fiveDetail =
+          s.fiveHour === null ? 'no reading yet' : `left · resets in ${timeLeft(s.fiveHour.resetsAt, s.now)}`
 
-      // ponytail: columns, not rows, so labels and bars line up on any font
+        // ponytail: columns, not rows, so labels and bars line up on any font
+        return (
+          <Box gap={2}>
+            <Box flexDirection="column">
+              <Text dimColor>Context</Text>
+              <Text dimColor>5-hour limit</Text>
+            </Box>
+            <Box flexDirection="column">
+              {meter(ctxPct, ctxTone, `context ${ctxPct}% used`)}
+              {meter(s.fiveHour === null ? 0 : left, fiveTone, `5-hour window ${left}% left`)}
+            </Box>
+            <Box flexDirection="column" alignItems="flex-end">
+              <Text bold color={alert(ctxTone)}>
+                {ctxPct}%
+              </Text>
+              <Text bold color={alert(fiveTone)}>
+                {s.fiveHour === null ? '—' : `${left}%`}
+              </Text>
+            </Box>
+            <Box flexDirection="column">
+              <Text dimColor>
+                used · {ctxTokens} of {tokens(s.context.window)}
+              </Text>
+              <Text dimColor>{fiveDetail}</Text>
+            </Box>
+          </Box>
+        )
+      }
+
+      // ponytail: the pet gives way when the band is too narrow for both
+      const petFits = mood !== null && (s === null || e.props.bodyColumns >= 84)
+      // read only on the terminal, so the desktop's band never redraws on the tick
+      const tick = petFits && Svg === null ? await read($, petTick) : 0
+
       return (
         <Box gap={2}>
-          <Box flexDirection="column">
-            <Text dimColor>Context</Text>
-            <Text dimColor>5-hour limit</Text>
-          </Box>
-          <Box flexDirection="column">
-            {meter(ctxPct, ctxTone, `context ${ctxPct}% used`)}
-            {meter(s.fiveHour === null ? 0 : left, fiveTone, `5-hour window ${left}% left`)}
-          </Box>
-          <Box flexDirection="column" alignItems="flex-end">
-            <Text bold color={alert(ctxTone)}>
-              {ctxPct}%
-            </Text>
-            <Text bold color={alert(fiveTone)}>
-              {s.fiveHour === null ? '—' : `${left}%`}
-            </Text>
-          </Box>
-          <Box flexDirection="column">
-            <Text dimColor>
-              used · {ctxTokens} of {tokens(s.context.window)}
-            </Text>
-            <Text dimColor>{fiveDetail}</Text>
-          </Box>
+          {s !== null && usage(s)}
+          {petFits && (
+            <Box key="pet" flexGrow={1} justifyContent="flex-end" alignItems="center" gap={1}>
+              <Text bold={mood === 'blocked'} color={mood === 'blocked' ? petColor(mood) : undefined} dimColor={mood !== 'blocked'}>
+                {CAPTION[mood]}
+              </Text>
+              {Svg ? (
+                <Svg source={petSvg(mood)} alt={`Claude: ${CAPTION[mood].toLowerCase()}`} width={PET_PX.width} height={PET_PX.height} isInteractive />
+              ) : (
+                <Text color={petColor(mood)}>{petFrame(mood, tick)}</Text>
+              )}
+            </Box>
+          )}
         </Box>
       )
     })

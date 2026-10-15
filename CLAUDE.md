@@ -14,7 +14,7 @@ claudio-skills/                       # repo folder; the plugin inside is named 
 │       │   └── plugin.json           # plugin manifest
 │       ├── skills/                   # skill folders, each with SKILL.md
 │       ├── agents/                   # subagents as .md files (optional)
-│       ├── hooks/                    # function-hooks mods: usage band + /slack-drafts pane (register.tsx)
+│       ├── hooks/                    # function-hooks mods: usage band (+ pet) + /slack-drafts pane (register.tsx)
 │       ├── types/                    # the mods' $.state contract
 │       ├── slack-drafts-phone/       # phone artifact page; slack-html.js is built from hooks/slack-html.ts
 │       ├── README.md                 # user-facing plugin docs
@@ -33,7 +33,7 @@ When users update the marketplace and reinstall, the harness pulls from `main` o
 
 ## Mods (function hooks)
 
-`hooks/register.tsx` holds every hook for both mods because the engine loads one hooks module per plugin, allows one unmatched `session.start` hook, and never follows `$` across an import. Pure helpers (`slack-html.ts`, `usage-bars.ts`) can live in their own files. Check changes with `claude plugin validate` and `claude plugin test` from `plugins/claudio`. In the desktop app a click on an unfocused pane only focuses it, so pane Buttons need two clicks ([anthropics/claude-code#99395](https://github.com/anthropics/claude-code/issues/99395)); a `ui.focus` workaround was tried in 4.0.1 and cannot work, because the pane already reports itself focused when the hook runs.
+`hooks/register.tsx` holds every hook for both mods because the engine loads one hooks module per plugin, allows one unmatched `session.start` hook, and never follows `$` across an import. Pure helpers (`slack-html.ts`, `usage-bars.ts`, `pet.ts`) can live in their own files. Check changes with `claude plugin validate` and `claude plugin test` from `plugins/claudio`. In the desktop app a click on an unfocused pane only focuses it, so pane Buttons need two clicks ([anthropics/claude-code#99395](https://github.com/anthropics/claude-code/issues/99395)); a `ui.focus` workaround was tried in 4.0.1 and cannot work, because the pane already reports itself focused when the hook runs.
 
 ## Skills only — no commands
 
