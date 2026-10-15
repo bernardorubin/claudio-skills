@@ -1,4 +1,3 @@
-"use strict";
 var SlackHtml = (() => {
   var __defProp = Object.defineProperty;
   var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -18,11 +17,12 @@ var SlackHtml = (() => {
   };
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // ../../../.claude/dev-mods/138f0cf1-c462-49ca-a064-fa3d6e7ef82c/slack-drafts/hooks/slack-html.ts
+  // hooks/slack-html.ts
   var slack_html_exports = {};
   __export(slack_html_exports, {
     clipboardScript: () => clipboardScript,
     labelOf: () => labelOf,
+    splitDraft: () => splitDraft,
     toHtml: () => toHtml,
     toPlain: () => toPlain
   });
@@ -101,6 +101,16 @@ var SlackHtml = (() => {
       );
     }
     return out.join("\n").trim() + "\n";
+  };
+  var HEADER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+  var splitDraft = (md) => {
+    const m = HEADER.exec(md);
+    if (!m) return { body: md, where: "" };
+    const where = (m[1] ?? "").split(/\r?\n/).flatMap((line) => {
+      const kv = /^(post_in|tag):\s*(.+)$/.exec(line.trim());
+      return kv ? [`${kv[1] === "tag" ? "Tag" : "Post in"} ${kv[2]}`] : [];
+    }).join("\n\n");
+    return { body: md.slice(m[0].length).replace(/^\s*\n/, ""), where };
   };
   var hex = (s) => [...new TextEncoder().encode(s)].map((b) => b.toString(16).padStart(2, "0")).join("");
   var literal = (s) => '"' + s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, '" & linefeed & "') + '"';

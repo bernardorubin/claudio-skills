@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { clipboardScript, labelOf, toHtml, toPlain } from './slack-html'
+import { clipboardScript, labelOf, splitDraft, toHtml, toPlain } from './slack-html'
 
 test('converts the skill vocabulary to Slack HTML', async () => {
   const got = toHtml('see [HPY-1](https://x.test) and `a<b`\n\n- one\n- two\n\n```\nx=1\n```')
@@ -34,4 +34,10 @@ test('flattens for a plain-text paste on the phone', async () => {
   expect(flat).not.toContain('`')
   expect(flat).toContain('- a tok')
   expect(toPlain('`[x](https://y.test)`').trim()).toBe('[x](https://y.test)')
+})
+
+test('splits where to post from the message', async () => {
+  const md = '---\npost_in: [#eng thread](https://x.test/p1)\ntag: [Nick](https://x.test/team/U1)\n---\n\n@Nick fixed'
+  expect(splitDraft(md)).toEqual({ body: '@Nick fixed', where: 'Post in [#eng thread](https://x.test/p1)\n\nTag [Nick](https://x.test/team/U1)' })
+  expect(splitDraft('no header')).toEqual({ body: 'no header', where: '' })
 })

@@ -41,6 +41,9 @@
   .meta { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
   .who { font-weight: 700; }
   .when { font: 0.78rem/1 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .where { color: var(--muted); font-size: 0.875rem; display: grid; gap: 2px; overflow-wrap: anywhere; min-width: 0; }
+  .where p { margin: 0; }
+  .where a { color: var(--accent); }
   .message { overflow-wrap: anywhere; min-width: 0; }
   .message p { margin: 0 0 8px; }
   .message p:last-child, .message ul:last-child, .message ol:last-child { margin-bottom: 0; }
@@ -82,7 +85,7 @@
 <script src="slack-html.js"></script>
 <script>
   const list = document.getElementById('list');
-  const { toHtml, toPlain, labelOf } = window.SlackHtml;
+  const { toHtml, toPlain, labelOf, splitDraft } = window.SlackHtml;
   let drafts = []; // newest version of each draft name, newest first
   let pruned = false;
 
@@ -110,12 +113,13 @@
   const say = (el, ok, text) => { el.textContent = text; el.className = 'status ' + (ok ? 'ok' : 'err'); };
   const why = e => (e && (e.code || e.name || e.message)) || 'unknown error';
 
-  const copyFormatted = async (d, status) => {
+  // Both copies take the message alone, never the where-to-post lines above it.
+  const copyFormatted = async (md, status) => {
     try {
       if (!window.ClipboardItem || !navigator.clipboard?.write) throw new Error('formatted copy is not available here');
       await navigator.clipboard.write([new ClipboardItem({
-        'text/html': new Blob([toHtml(d.md)], { type: 'text/html' }),
-        'text/plain': new Blob([d.md], { type: 'text/plain' }),
+        'text/html': new Blob([toHtml(md)], { type: 'text/html' }),
+        'text/plain': new Blob([md], { type: 'text/plain' }),
       })]);
       say(status, true, 'Copied. Paste it into Slack.');
     } catch (e) {
@@ -123,9 +127,9 @@
     }
   };
 
-  const copyPlain = async (d, status) => {
+  const copyPlain = async (md, status) => {
     try {
-      await navigator.clipboard.writeText(toPlain(d.md));
+      await navigator.clipboard.writeText(toPlain(md));
       say(status, true, 'Copied as plain text: links are bare URLs.');
     } catch (e) {
       say(status, false, 'Could not copy (' + why(e) + ').');
@@ -148,16 +152,21 @@
       const t = document.createElement('span'); t.className = 'when'; t.textContent = when;
       meta.append(w, t);
 
+      const { body, where } = splitDraft(d.md);
+      const place = document.createElement('div'); place.className = 'where';
+      place.hidden = where === '';
+      if (where) place.append(safeHtml(where));
+
       const msg = document.createElement('div'); msg.className = 'message';
-      msg.append(safeHtml(d.md));
+      msg.append(safeHtml(body));
 
       const status = document.createElement('p'); status.className = 'status'; status.setAttribute('role', 'status');
 
       const actions = document.createElement('div'); actions.className = 'actions';
       const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'primary'; copy.textContent = 'Copy for Slack';
-      copy.addEventListener('click', () => copyFormatted(d, status));
+      copy.addEventListener('click', () => copyFormatted(body, status));
       const plain = document.createElement('button'); plain.type = 'button'; plain.textContent = 'Copy plain';
-      plain.addEventListener('click', () => copyPlain(d, status));
+      plain.addEventListener('click', () => copyPlain(body, status));
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'quiet'; remove.textContent = 'Remove';
       remove.addEventListener('click', async () => {
         if (!remove.classList.contains('armed')) {
@@ -170,7 +179,7 @@
       });
       actions.append(copy, plain, remove);
 
-      card.append(meta, msg, actions, status);
+      card.append(meta, place, msg, actions, status);
       list.append(card);
     }
   };

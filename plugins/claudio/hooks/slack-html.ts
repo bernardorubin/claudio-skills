@@ -96,6 +96,27 @@ export const toPlain = (md: string) => {
   return out.join('\n').trim() + '\n'
 }
 
+// write-slack-message may open a draft with where to post it and who to tag:
+//   ---
+//   post_in: [#hpy-api thread on PR 2886](https://x.slack.com/archives/C1/p1760467200123456)
+//   tag: [Nick Conn](https://x.slack.com/team/U081C53KT0T)
+//   ---
+// `where` is those lines as Markdown for the pane and the phone page; `body` is the
+// message alone, the only part a copy takes.
+const HEADER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/
+export const splitDraft = (md: string) => {
+  const m = HEADER.exec(md)
+  if (!m) return { body: md, where: '' }
+  const where = (m[1] ?? '')
+    .split(/\r?\n/)
+    .flatMap(line => {
+      const kv = /^(post_in|tag):\s*(.+)$/.exec(line.trim())
+      return kv ? [`${kv[1] === 'tag' ? 'Tag' : 'Post in'} ${kv[2]}`] : []
+    })
+    .join('\n\n')
+  return { body: md.slice(m[0].length).replace(/^\s*\n/, ''), where }
+}
+
 const hex = (s: string) => [...new TextEncoder().encode(s)].map(b => b.toString(16).padStart(2, '0')).join('')
 
 const literal = (s: string) => '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '" & linefeed & "') + '"'

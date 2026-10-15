@@ -181,7 +181,7 @@ Drafts a Slack message ready to paste, business-casual, with **no sentence cap**
 
 **Reading drafts back.** `/slack-drafts` opens a pane of every draft with **Copy for Slack** (an HTML clipboard copy, so `[label](url)` pastes as a real link) and delete, and its optional phone page brings the same copy to your iPhone. See [Mods](#mods).
 
-**With the Slack MCP connected**, the report line names where to post it (the thread, channel or DM, linked so one click opens it in Slack) and who to tag (each looked up in Slack, linked to their profile), instead of a vague `everyone`. It only reads through the MCP and never posts: anything posted that way carries a "Sent using Claude" footer.
+**With the Slack MCP connected**, the report line names where to post it (the thread, channel or DM, linked so one click opens it in Slack) and who to tag (each looked up in Slack, linked to their profile), instead of a vague `everyone`. In the drafts folder the same two lines sit at the top of the draft, so the pane and the phone page show them above the message; neither copy includes them. It only reads through the MCP and never posts: anything posted that way carries a "Sent using Claude" footer.
 
 **On a phone**, say so and the reply links the Slack Drafts phone page instead of the file path. The draft never goes in the chat, on any device.
 
@@ -347,7 +347,7 @@ Off by default, since another plugin's band (a skin, say) may want that spot: tu
 
 A pane for the drafts `/write-slack-message` saves to `~/Desktop/slack-drafts/`, plus an optional phone page so you can paste them from your iPhone with Slack formatting intact.
 
-- `/slack-drafts` opens the pane: one card per draft, newest first, rendered as Markdown.
+- `/slack-drafts` opens the pane: one card per draft, newest first, rendered as Markdown, with where to post it and who to tag (linked) above the message when the skill found them.
 - Saving a draft opens the pane on its own, and a save or delete in any session shows in every open pane within a few seconds.
 - **Copy for Slack** puts an HTML version on the Mac clipboard (via `osascript`), so `[label](url)` pastes as a link and backticks as code. **Delete** moves the file to the Trash.
 - `SLACK_DRAFTS_DIR` overrides the folder.

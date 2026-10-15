@@ -185,6 +185,20 @@ name Slack autocompletes for them. A pasted `@name` may stay plain text, so the
 report line names each person to tag, linked to their profile, and they retype `@`
 and pick that person.
 
+**In folder mode, put both at the top of the draft file too**, so the
+`/slack-drafts` pane and the phone page show them above the message:
+
+```
+---
+post_in: [#hpy-api thread on PR 2886](https://happyring.slack.com/archives/C0123/p1760467200123456)
+tag: [Nick Conn](https://happyring.slack.com/team/U081C53KT0T), [Grace Lee](https://happyring.slack.com/team/U0789)
+---
+```
+
+Both keys are optional; leave `tag` out when nobody is tagged. Both copies leave this
+header out. In default mode (`slack-message-for-<recipient>.md`) skip it: that file
+gets copied whole.
+
 ## Output
 
 1. **Where to save — the folder decides.** Check once with `test -d`, then:
@@ -215,7 +229,8 @@ and pick that person.
    (`hpy-eng`) for a channel or thread post. Several people named? Use the one
    who has to act. `everyone` only when there's no Slack MCP to find the channel.
    No dates, no ticket keys, no full sentences in the filename.
-3. The file contains ONLY the Slack message, no preamble or instructions.
+3. The file contains ONLY the Slack message, no preamble or instructions (plus the
+   `post_in` / `tag` header above, in folder mode with the Slack MCP).
 4. **The file IS the delivery. Never paste the draft into the chat reply.** Say
    it's saved, give the path, stop. Pasting it inline makes the user read the
    same message twice. With the Slack MCP, the report line also says where to

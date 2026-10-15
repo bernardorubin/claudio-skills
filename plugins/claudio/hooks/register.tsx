@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit } from 'claude-code'
 
 import type { Draft, UsageSnap } from '../types'
-import { clipboardScript, labelOf } from './slack-html'
+import { clipboardScript, labelOf, splitDraft } from './slack-html'
 import { BAR_PX, BLUE, ROW_PX, bar, svgBar, timeLeft, tokens, tone } from './usage-bars'
 
 // Two mods in one module: the engine loads one hooks module per plugin, allows
@@ -34,10 +34,12 @@ const refresh = async ($: EngineInterface) => {
   return list
 }
 
+// Copies the message alone; the where-to-post header stays behind.
 const copyForSlack = async ($: EngineInterface, d: Draft) => {
-  const rich = await $.process.run(['osascript', '-e', clipboardScript(d.text)]).catch(() => null)
+  const { body } = splitDraft(d.text)
+  const rich = await $.process.run(['osascript', '-e', clipboardScript(body)]).catch(() => null)
   if (rich?.exitCode === 0) return $.ui.toast(`Copied ${labelOf(d.name).who} draft for Slack`)
-  await $.process.run(['pbcopy'], { stdin: d.text })
+  await $.process.run(['pbcopy'], { stdin: body })
   $.ui.toast('Copied as plain text (the Slack-safe copy failed)')
 }
 
@@ -173,13 +175,15 @@ export const register: Register = (on, options) => {
       <Box flexDirection="column" gap={1}>
         {list.map((d, i) => {
           const { who, when } = labelOf(d.name)
+          const { body, where } = splitDraft(d.text)
           return (
             <Box key={`draft-${i}`} flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap={1}>
               <Box gap={2}>
                 <Text bold wrap="truncate-end">{who}</Text>
                 {when !== '' && <Text dimColor wrap="truncate-end">{when}</Text>}
               </Box>
-              <Markdown text={d.text} />
+              {where !== '' && <Markdown key={`where-${d.name}`} text={where} dimColor />}
+              <Markdown text={body} />
               <Box gap={1} flexWrap="wrap">
                 <Button key={`copy-${d.name}`} label="Copy for Slack" variant="primary" onPress={() => copyForSlack($, d)} />
                 <Button key={`del-${d.name}`} label="Delete" plain dimColor onPress={() => trash($, d, phoneUrl)} />
