@@ -233,8 +233,9 @@ and nothing else counts:
   message exactly as it will post, as plain text, then one line with the destination
   and who it tags. End the turn on one question, "Send to the #hpy-eng thread, tagging
   Nick?", with Send and Not now buttons. Only a yes sends: `slack_send_message` with the
-  same arguments (the safety rule prompts once more), then move the local draft to
-  `~/.Trash/` and reply with the message link.
+  same arguments, plus the `draft_id` from an earlier `slack_send_message_draft` so the
+  Slack draft is cleared (the safety rule prompts once more), then move the local draft
+  to `~/.Trash/` and reply with the message link.
 
 "Send this on slack" in the request is not a yes: they haven't seen the draft yet. A
 yes covers that draft only, so a redraft asks again. A no, or anything but a yes,
