@@ -3,6 +3,7 @@ import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit }
 
 import type { Draft, UsageSnap } from '../types'
 import { clipboardScript, labelOf } from './slack-html'
+import { parseDraft, withMentions } from './slack-send'
 import { BAR_PX, BLUE, ROW_PX, bar, svgBar, timeLeft, tokens, tone } from './usage-bars'
 
 // Two mods in one module: the engine loads one hooks module per plugin, allows
@@ -28,7 +29,10 @@ const refresh = async ($: EngineInterface) => {
   const held = await read($, drafts)
   if (signature(mds) === signature(held)) return held
   const list: Draft[] = await Promise.all(
-    mds.map(async f => ({ name: f.name, path: `${dir}/${f.name}`, mtimeMs: f.mtimeMs, text: await $.fs.read(`${dir}/${f.name}`) })),
+    mds.map(async f => {
+      const { body, slack } = parseDraft(await $.fs.read(`${dir}/${f.name}`))
+      return { name: f.name, path: `${dir}/${f.name}`, mtimeMs: f.mtimeMs, text: body, ...(slack ? { slack } : {}) }
+    }),
   )
   await update($, drafts, () => list)
   return list
@@ -42,11 +46,43 @@ const copyForSlack = async ($: EngineInterface, d: Draft) => {
 }
 
 // ponytail: moved to ~/.Trash, not unlinked, so a misclick is recoverable from Finder
-const trash = async ($: EngineInterface, d: Draft, url: string) => {
+// sentTo: where the draft just went, so one toast says both
+const trash = async ($: EngineInterface, d: Draft, url: string, sentTo?: string) => {
   const to = `${await home($)}/.Trash/${d.name.replace(/\.md$/, '')} ${Date.now()}.md`
   const r = await $.process.run(['mv', d.path, to])
-  $.ui.toast(r.exitCode === 0 ? `Moved ${d.name} to the Trash` : `Could not delete: ${r.stderr.trim()}`)
+  const head = sentTo ? `Sent to ${sentTo}` : ''
+  $.ui.toast(
+    r.exitCode === 0
+      ? head || `Moved ${d.name} to the Trash`
+      : `${head ? `${head}, but could` : 'Could'} not move ${d.name} to the Trash: ${r.stderr.trim()}`,
+  )
   await syncPhone($, url, await refresh($))
+}
+
+// Paths already sent, so a second press (or a draft the Trash refused) never posts twice.
+// ponytail: module memory, so a mod reload forgets it; the sent draft is in the Trash by then
+const sent = new Set<string>()
+
+// The click is the send: $.mcp.call raises no permission prompt, and the desktop's
+// two-click pane buttons make a stray single click harmless.
+const sendToSlack = async ($: EngineInterface, d: Draft, url: string) => {
+  const s = d.slack
+  if (!s) return
+  if (sent.has(d.path)) return $.ui.toast(`Already sent to ${s.to}`)
+  sent.add(d.path)
+  const r = await $.mcp
+    .call(s.server, 'slack_send_message', {
+      channel_id: s.channel,
+      message: withMentions(d.text, s.mentions),
+      ...(s.thread ? { thread_ts: s.thread } : {}),
+    })
+    .catch((err: unknown) => ({ isError: true, content: [{ type: 'text', text: String(err) }] }))
+  if (r.isError) {
+    sent.delete(d.path)
+    const why = r.content.map(b => b.text ?? '').join(' ').trim().slice(0, 160) || 'no reason given'
+    return $.ui.toast(`Not sent: ${why}. Copy for Slack still works.`)
+  }
+  await trash($, d, url, s.to)
 }
 
 // The phone page (an artifact with a db) gets an append-only copy: a new row per
@@ -179,9 +215,11 @@ export const register: Register = (on, options) => {
                 <Text bold wrap="truncate-end">{who}</Text>
                 {when !== '' && <Text dimColor wrap="truncate-end">{when}</Text>}
               </Box>
+              {d.slack && <Text dimColor wrap="truncate-end">To {d.slack.to}</Text>}
               <Markdown text={d.text} />
               <Box gap={1} flexWrap="wrap">
-                <Button key={`copy-${d.name}`} label="Copy for Slack" variant="primary" onPress={() => copyForSlack($, d)} />
+                {d.slack && <Button key={`send-${d.name}`} label="Send to Slack" variant="primary" onPress={() => sendToSlack($, d, phoneUrl)} />}
+                <Button key={`copy-${d.name}`} label="Copy for Slack" {...(d.slack ? {} : { variant: 'primary' as const })} onPress={() => copyForSlack($, d)} />
                 <Button key={`del-${d.name}`} label="Delete" plain dimColor onPress={() => trash($, d, phoneUrl)} />
               </Box>
             </Box>

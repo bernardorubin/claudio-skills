@@ -6,7 +6,9 @@ description: >-
   slack", "send this on slack", or any request to format text for Slack. Saves a copy-
   paste-ready draft to ~/Desktop/slack-drafts/ (shown in the /slack-drafts pane and
   on the Slack Drafts phone page), falling back to
-  ~/Desktop/slack-message-for-<recipient>.md. Never puts the draft in the chat.
+  ~/Desktop/slack-message-for-<recipient>.md. With the Slack MCP connected it resolves
+  where the message goes and every @mention to a Slack ID, so the pane's Send button
+  (or the user's yes, on the phone) posts it. Never posts without that approval.
 ---
 
 # Write Slack Message
@@ -150,6 +152,69 @@ without a redraft. This matters more under the tiny default than it did before:
 tiny cuts real content on purpose, and that line is the only way it comes back.
 Never preemptively keep something because they might want it.
 
+## Send target and mentions (when the Slack MCP is connected)
+
+Applies when this session has a Slack MCP tool named `mcp__<server>__slack_send_message`
+(loaded or deferred; load `slack_search_users`, `slack_search_channels` and
+`slack_list_channel_members` with ToolSearch as needed) **and** the draft goes to the
+folder (folder mode, below). Then the draft carries where it goes, and the
+`/slack-drafts` pane shows a **Send to Slack** button that posts it. Without either,
+skip this section: the draft stays copy-paste only.
+
+**Where it goes**, first match wins:
+1. A Slack link the user gave for this message. `https://<ws>.slack.com/archives/<C>/p<16 digits>`
+   is channel `<C>`, ts = the first 10 digits `.` the last 6. A `thread_ts=` in the
+   link means it is a reply: use that as the thread. Replying to a message that is
+   not in a thread: its own ts is the thread.
+2. The thread or channel this conversation is plainly about (a pasted Slack thread).
+3. One person named and no channel → DM: the channel is their user ID.
+4. A channel named → `slack_search_channels` for its ID.
+
+Still not sure → ask in one line ("DM Nick, or reply in the #hpy-eng thread?"). Never
+guess a destination: a wrong one sends the message to the wrong people.
+
+**Every `@person` resolves to a user ID, or is not in the draft.** Plain `@Nick` text
+is not a mention: Slack only notifies (and draws it blue) for `<@U0456DEF>`. Look up
+each person with `slack_search_users`. Several match → keep the one who is a member
+of the destination (`slack_list_channel_members`); still several or none → ask. Keep
+`@FirstName` in the message (it reads right in the pane and the copy) and map it in
+the front matter; the pane swaps in `<@ID>` when it sends.
+
+**Front matter**, first thing in the file:
+
+```
+---
+slack_server: 9d6ac2ae-94d5-4dc8-b91f-2e941e95e9e3
+slack_channel: C0123ABCD
+slack_thread: 1760467200.123456
+slack_to: #hpy-eng, thread on PR 2886
+slack_mentions: @Nick=U0456DEF, @Grace=U0789GHI
+---
+```
+
+`slack_server` is the part of the tool name between `mcp__` and `__slack_send_message`.
+`slack_channel` is the user ID for a DM. Leave out `slack_thread` unless it is a
+reply. `slack_to` is the place as a human reads it. Values only, no comments on the
+lines. The pane strips it from what it shows, copies and sends to the phone page.
+
+**Nothing posts without the user's approval of this exact draft.** Two ways to approve,
+and nothing else counts:
+
+- **At the desk: the pane's Send to Slack button.** The click is the approval and the
+  pane posts it. You call nothing.
+- **Away from the desk** (they say they're on their phone or away, or ask you to send
+  it): ask first. Show the message exactly as it will post, as plain text (they can't
+  approve what they can't read, and there is no pane on the phone), then one line with
+  the destination and who it tags. End the turn on one question, "Send to the #hpy-eng
+  thread, tagging Nick?", with Send and Not now buttons. Only a yes to that question
+  sends: `slack_send_message` with the front matter's channel and thread, every mapped
+  `@Name` replaced by `<@ID>`. Then move the draft to `~/.Trash/` and reply with the
+  message link the tool returns.
+
+"Send this on slack" in the request is not a yes: they haven't seen the draft yet. A
+yes covers that draft only, so a redraft asks again. A no, or anything but a yes,
+leaves the draft in the folder.
+
 ## Output
 
 1. **Where to save — the folder decides.** Check once with `test -d`, then:
@@ -179,25 +244,30 @@ Never preemptively keep something because they might want it.
 2. **`<recipient>`**: first name, lowercase (`dmytro`), or `everyone` for a
    channel or broadcast post. Several people named? Use the one who has to act.
    No dates, no ticket keys, no full sentences in the filename.
-3. The file contains ONLY the Slack message, no preamble or instructions.
+3. The file contains ONLY the Slack message, no preamble or instructions (plus the
+   front matter above, when it applies).
 4. **The file IS the delivery. Never paste the draft into the chat reply.** Say
    it's saved, give the path, stop. Pasting it inline makes the user read the
-   same message twice.
+   same message twice. With a send target, the report line also says where Send
+   posts it and who it tags: "Saved nick-1014-1530.md. Send posts it to the
+   #hpy-eng thread on PR 2886, tagging Nick (U0456DEF)."
 5. **Start nothing.** In folder mode this plugin's `/slack-drafts` pane
    sees the save, opens its pane and sends the draft to the phone page on its
    own. Mention `/slack-drafts` once in the report line only if the user seems
    not to know where drafts show up.
 6. Below that, one line naming what you cut, so they can add it back.
 
-### On a phone -- link the Slack Drafts page
+### On a phone
 
-The draft never goes in the chat, on any device: no code block, no inline copy.
-Saving it is what sends it to the `/slack-drafts` pane on the desktop and to
-the Slack Drafts phone page, whose Copy for Slack keeps links and code.
+**Slack MCP connected:** the away-from-the-desk approval above. That is the one
+time the draft appears in the chat.
 
-So when the user says they are on their phone, on the road, or away from their
-laptop, save exactly as above and change only the report line: link the phone
-page instead of giving the path. Its URL is the plugin's `phoneUrl` option:
+**Otherwise, link the Slack Drafts page.** The draft never goes in the chat: no
+code block, no inline copy. Saving it is what sends it to the `/slack-drafts`
+pane on the desktop and to the Slack Drafts phone page, whose Copy for Slack
+keeps links and code. So save exactly as above and change only the report line:
+link the phone page instead of giving the path. Its URL is the plugin's
+`phoneUrl` option:
 
 ```bash
 jq -r '.pluginConfigs["claudio@claudio"].options.phoneUrl // empty' ~/.claude/settings.json
@@ -210,8 +280,9 @@ receives drafts saved in folder mode.
 ### Browsing past drafts (optional)
 
 This plugin's `/slack-drafts` pane shows them: it
-lists every draft newest first, with Copy for Slack (an HTML
-clipboard copy, so `[label](url)` pastes as a real link) and delete. On the phone, its pinned Slack Drafts page does the same. Mention it only if
+lists every draft newest first, with Send to Slack (drafts with a send target),
+Copy for Slack (an HTML clipboard copy, so `[label](url)` pastes as a real link)
+and delete. On the phone, its pinned Slack Drafts page does the same. Mention it only if
 the user asks how to find an older draft; the drafting flow above must work
 unchanged without it.
 

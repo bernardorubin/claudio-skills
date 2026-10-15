@@ -181,7 +181,9 @@ Drafts a Slack message ready to paste, business-casual, with **no sentence cap**
 
 **Reading drafts back.** `/slack-drafts` opens a pane of every draft with **Copy for Slack** (an HTML clipboard copy, so `[label](url)` pastes as a real link) and delete, and its optional phone page brings the same copy to your iPhone. See [Mods](#mods).
 
-**On a phone**, say so and the reply links the Slack Drafts phone page instead of the file path. The draft never goes in the chat, on any device.
+**With the Slack MCP connected**, the draft also carries where it goes (a thread from a link you gave, a DM, or a channel; it asks when unsure) and resolves every `@person` to their Slack user ID, so tags post as real mentions instead of plain `@Nick` text. The report line says where it will post and who it tags. Nothing posts without your approval of that exact draft: the pane's **Send to Slack** button at the desk, or, on the phone, a yes to "Send to …?" after the skill shows you the message.
+
+**On a phone** without the Slack MCP, say so and the reply links the Slack Drafts phone page instead of the file path.
 
 Auto-triggers on phrases like "draft a slack message", "how should I phrase this for slack", "write up a slack post".
 
@@ -347,6 +349,7 @@ A pane for the drafts `/write-slack-message` saves to `~/Desktop/slack-drafts/`,
 
 - `/slack-drafts` opens the pane: one card per draft, newest first, rendered as Markdown.
 - Saving a draft opens the pane on its own, and a save or delete in any session shows in every open pane within a few seconds.
+- **Send to Slack** shows on a draft that names its destination (the skill adds it when the Slack MCP is connected). It posts through the Slack MCP with `@Name` swapped for `<@ID>`, then moves the draft to the Trash. The click is the approval: the mod asks for no tool permission, and a desktop pane button takes two clicks anyway.
 - **Copy for Slack** puts an HTML version on the Mac clipboard (via `osascript`), so `[label](url)` pastes as a link and backticks as code. **Delete** moves the file to the Trash.
 - `SLACK_DRAFTS_DIR` overrides the folder.
 
