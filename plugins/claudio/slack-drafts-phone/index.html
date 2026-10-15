@@ -167,40 +167,46 @@
       copy.addEventListener('click', () => copyFormatted(body, status));
       const plain = document.createElement('button'); plain.type = 'button'; plain.textContent = 'Copy plain';
       plain.addEventListener('click', () => copyPlain(body, status));
-      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'quiet'; remove.textContent = 'Remove';
-      remove.addEventListener('click', async () => {
-        if (!remove.classList.contains('armed')) {
-          remove.classList.add('armed'); remove.textContent = 'Tap again to remove';
-          setTimeout(() => { remove.classList.remove('armed'); remove.textContent = 'Remove'; }, 4000);
+      // A tombstone, not a delete, so the Mac sees it and trashes its file too.
+      const del = document.createElement('button'); del.type = 'button'; del.className = 'quiet'; del.textContent = 'Delete';
+      del.addEventListener('click', async () => {
+        if (!del.classList.contains('armed')) {
+          del.classList.add('armed'); del.textContent = 'Tap again to delete';
+          setTimeout(() => { del.classList.remove('armed'); del.textContent = 'Delete'; }, 4000);
           return;
         }
-        try { for (const id of d.ids) await db.collection('drafts').doc(id).delete(); }
-        catch (e) { say(status, false, 'Could not remove (' + why(e) + ').'); }
+        const now = Date.now();
+        const id = d.name.replace(/\.md$/, '').replace(/[^A-Za-z0-9_.~:@+-]/g, '_') + '-phone-' + now;
+        try { await db.collection('drafts').doc(id).set({ name: d.name, deleted: true, from: 'phone', savedAt: now }); }
+        catch (e) { say(status, false, 'Could not delete (' + why(e) + ').'); }
       });
-      actions.append(copy, plain, remove);
+      actions.append(copy, plain, del);
 
       card.append(meta, place, msg, actions, status);
       list.append(card);
     }
   };
 
-  // The Mac only ever adds rows (a new row per save, a tombstone per delete), so the
+  // Both sides only add rows (a new row per save, a tombstone per delete), so the
   // newest row per draft name wins and the rest are leftovers this page tidies once.
+  // A phone delete stays until the Mac answers it with its own tombstone, which says
+  // the file is in the Trash. ponytail: a draft no Mac holds keeps its rows, hidden.
   const fold = docs => {
     const byName = new Map();
     for (const doc of docs) {
       const row = doc.data();
       if (!row || typeof row.name !== 'string') continue;
-      const g = byName.get(row.name) || { name: row.name, ids: [], newest: null };
+      const g = byName.get(row.name) || { name: row.name, ids: [], newest: null, macDeleted: false };
       g.ids.push(doc.id);
+      if (row.deleted && row.from !== 'phone') g.macDeleted = true;
       if (!g.newest || (row.savedAt || 0) > (g.newest.savedAt || 0)) g.newest = { ...row, id: doc.id };
       byName.set(row.name, g);
     }
     const groups = [...byName.values()];
     const live = groups.filter(g => !g.newest.deleted)
-      .map(g => ({ name: g.name, md: String(g.newest.md || ''), savedAt: g.newest.savedAt || 0, ids: g.ids }))
+      .map(g => ({ name: g.name, md: String(g.newest.md || ''), savedAt: g.newest.savedAt || 0 }))
       .sort((a, b) => b.savedAt - a.savedAt);
-    const stale = groups.flatMap(g => g.newest.deleted ? g.ids : g.ids.filter(id => id !== g.newest.id));
+    const stale = groups.flatMap(g => g.newest.deleted ? (g.macDeleted ? g.ids : []) : g.ids.filter(id => id !== g.newest.id));
     return { live, stale };
   };
 

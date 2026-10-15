@@ -364,7 +364,7 @@ A pane for the drafts `/write-slack-message` saves to `~/Desktop/slack-drafts/`,
 - **Copy for Slack** puts an HTML version on the Mac clipboard (via `osascript`), so `[label](url)` pastes as a link and backticks as code. **Delete** moves the file to the Trash.
 - `SLACK_DRAFTS_DIR` overrides the folder.
 
-**On your phone.** Slack on iOS only keeps formatting when the clipboard carries HTML, which the Claude app cannot put there for a mod. So drafts are mirrored to a private claude.ai artifact ([`slack-drafts-phone/index.html`](slack-drafts-phone/index.html)) whose **Copy for Slack** button does that copy in the browser. Each save, delete or `/slack-drafts` appends rows to that artifact's database through the `ArtifactData` tool (approve it once). The page shows the newest row per draft and tidies the rest.
+**On your phone.** Slack on iOS only keeps formatting when the clipboard carries HTML, which the Claude app cannot put there for a mod. So drafts are mirrored to a private claude.ai artifact ([`slack-drafts-phone/index.html`](slack-drafts-phone/index.html)) whose **Copy for Slack** button does that copy in the browser. Each save, delete or `/slack-drafts` appends rows to that artifact's database through the `ArtifactData` tool (approve it once). The page shows the newest row per draft and tidies the rest. **Delete** on the page moves the Mac file to the Trash too, within about 30 seconds while a Claude Code session is open, or at once on `/slack-drafts`.
 
 Set it up once per account:
 
@@ -373,6 +373,8 @@ Set it up once per account:
 3. Pin the page in claude.ai so it is one tap away on the phone.
 
 Leave the option empty to skip the phone copy.
+
+The page is a published copy of `slack-drafts-phone/`, so a claudio update that changes those files does not reach it on its own. After such an update, republish the page to the same URL (ask Claude; the URL, the pin and the drafts stay). A page older than 4.6.0 copies the where-to-post header along with the message.
 
 ### Developing the mods
 

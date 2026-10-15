@@ -45,10 +45,45 @@ const copyForSlack = async ($: EngineInterface, d: Draft) => {
 }
 
 // ponytail: moved to ~/.Trash, not unlinked, so a misclick is recoverable from Finder
+const moveToTrash = async ($: EngineInterface, d: Draft) =>
+  $.process.run(['mv', d.path, `${await home($)}/.Trash/${d.name.replace(/\.md$/, '')} ${Date.now()}.md`])
+
 const trash = async ($: EngineInterface, d: Draft, url: string) => {
-  const to = `${await home($)}/.Trash/${d.name.replace(/\.md$/, '')} ${Date.now()}.md`
-  const r = await $.process.run(['mv', d.path, to])
+  const r = await moveToTrash($, d)
   $.ui.toast(r.exitCode === 0 ? `Moved ${d.name} to the Trash` : `Could not delete: ${r.stderr.trim()}`)
+  await syncPhone($, url, await refresh($))
+}
+
+// A delete on the phone page adds a tombstone marked from: 'phone'. The Mac trashes
+// the file, and the tombstone syncPhone then writes tells the page to tidy both away.
+// `quiet` (the background poll) skips the read when it would open a permission dialog.
+const PULL_MS = 30_000
+const pullPhoneDeletes = async ($: EngineInterface, url: string, quiet: boolean) => {
+  if (!url) return
+  // every session polls; the shared stamp keeps it to about one read per interval in all
+  const now = await $.clock.now()
+  if (quiet && now - Number((await $.store.get('phonePulledAt')) ?? 0) < PULL_MS - 1_000) return
+  await $.store.set('phonePulledAt', now)
+  const input = { action: 'query' as const, url, collection: 'drafts', query: { where: [['from', '==', 'phone']], limit: 1000 } }
+  if (quiet && (await $.tool.check({ tool: 'ArtifactData', input })).decision !== 'allow') return
+  const r = await $.tool.call({ tool: 'ArtifactData', ...input })
+  if (r.deny !== undefined || r.isError) return
+  // the read comes back as one JSON document per line between two marker lines
+  const deletedAt = new Map<string, number>()
+  for (const line of (r.text ?? '').split('\n')) {
+    if (!line.startsWith('{')) continue
+    try {
+      const { data } = JSON.parse(line) as { data?: { name?: unknown; deleted?: unknown; savedAt?: unknown } }
+      if (data?.deleted === true && typeof data.name === 'string') deletedAt.set(data.name, Math.max(deletedAt.get(data.name) ?? 0, Number(data.savedAt) || 0))
+    } catch {
+      continue
+    }
+  }
+  // a draft saved again on the Mac after the phone deleted it stays
+  const doomed = (await refresh($)).filter(d => (deletedAt.get(d.name) ?? -1) >= d.mtimeMs)
+  if (doomed.length === 0) return
+  const moved = (await Promise.all(doomed.map(d => moveToTrash($, d)))).filter(r => r.exitCode === 0).length
+  if (moved > 0) $.ui.toast(`Moved ${moved} draft${moved === 1 ? '' : 's'} deleted on the phone to the Trash`)
   await syncPhone($, url, await refresh($))
 }
 
@@ -87,13 +122,15 @@ const syncPhone = async ($: EngineInterface, url: string, list: Draft[]): Promis
 const open = ($: EngineInterface, focus: boolean) =>
   $.ui.open({ id: PANE, title: 'Slack drafts', closeOnEscape: true, ...(focus ? { focus: true as const } : {}) })
 
-const startSlackDrafts = async ($: EngineInterface) => {
+const startSlackDrafts = async ($: EngineInterface, url: string) => {
   await $.command.register({ name: 'slack-drafts', description: 'Show your Slack drafts in a pane and send new ones to the phone page' })
   await refresh($)
   // Each session holds its own list, so a save or delete made in another session
   // shows here on the next tick. ponytail: a 3s poll of one small folder; a file
   // watcher if the engine ever grows one
   $.clock.every(3_000, () => void refresh($).catch(() => undefined))
+  // ponytail: a 30s read of the phone page's tombstones; a push if the db ever offers one to a mod
+  $.clock.every(PULL_MS, () => void pullPhoneDeletes($, url, true).catch(() => undefined))
 }
 
 // ── first run: point a new install at /vault-init ──
@@ -172,13 +209,20 @@ export const register: Register = (on, options) => {
     const ran = await next(e)
     // one mod failing to start must not keep the others from starting
     const failed = (
-      await Promise.allSettled([startSlackDrafts($), (showUsage || showPet) && startUsageBars($), showPet && startPet($), nudgeVault($), !showPet && nudgePet($)])
+      await Promise.allSettled([
+        startSlackDrafts($, phoneUrl),
+        (showUsage || showPet) && startUsageBars($),
+        showPet && startPet($),
+        nudgeVault($),
+        !showPet && nudgePet($),
+      ])
     ).find(r => r.status === 'rejected')
     if (failed) throw failed.reason
     return ran
   })
 
   on('command.run', { command: 'slack-drafts' }, async $ => {
+    await pullPhoneDeletes($, phoneUrl, false).catch(() => undefined)
     const list = await refresh($)
     await open($, true)
     const phone = await syncPhone($, phoneUrl, list)
