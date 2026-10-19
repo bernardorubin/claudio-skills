@@ -22,6 +22,7 @@ var SlackHtml = (() => {
   __export(slack_html_exports, {
     clipboardScript: () => clipboardScript,
     labelOf: () => labelOf,
+    markMentions: () => markMentions,
     splitDraft: () => splitDraft,
     toHtml: () => toHtml,
     toPlain: () => toPlain
@@ -82,6 +83,15 @@ var SlackHtml = (() => {
     if (inCode) flushCode();
     closeList();
     return out.join("");
+  };
+  var MENTION = /(^|[\s(])(@\w+(?:[.-]\w+)*)/g;
+  var markMentions = (md) => {
+    let inCode = false;
+    return md.split("\n").map((line) => {
+      if (line.trimStart().startsWith("```")) inCode = !inCode;
+      if (inCode || line.trimStart().startsWith("```")) return line;
+      return line.split(CODE_SPAN).map((part, i) => i % 2 ? `\`${part}\`` : part.replace(MENTION, "$1`$2`")).join("");
+    }).join("\n");
   };
   var toPlain = (md) => {
     const out = [];
