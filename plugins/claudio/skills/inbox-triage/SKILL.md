@@ -1,6 +1,6 @@
 ---
 name: inbox-triage
-description: Check the user's Gmail inbox for email that needs them since the last check, then suggest an action for each one — a reply saved as a Gmail draft, a Jira ticket to file (checked against Jira first) for a person's request or a vendor alert about a system the team runs, or nothing — using the context of the conversation it runs in. Suggests only; never sends, archives, labels or marks anything read. Use when the user says "check my email", "anything in my inbox?", "triage my inbox", "do I need to reply to any emails", or runs /inbox-triage, including on a timer via "/loop 1h /inbox-triage".
+description: Check the user's Gmail inbox for email that needs them since the last check, then suggest an action for each one — a reply saved as a Gmail draft, a Jira ticket to file (checked against Jira first) for a person's request or a vendor alert about a system the team runs, or nothing — using the context of the conversation it runs in. Suggests only; never sends, archives, labels or marks anything read. Use when the user says "check my email", "anything in my inbox?", "triage my inbox", "do I need to reply to any emails", or runs /inbox-triage, including on a timer via "/loop 1h inbox-triage". The bare prompt "inbox-triage" (what a loop sends) runs it too.
 ---
 
 # Inbox Triage
@@ -25,7 +25,7 @@ needs digging before it can be answered is a suggestion to run `investigate`.
 
 ## On a timer
 
-`/loop 1h /inbox-triage` repeats this inside the current conversation while the session
+`/loop 1h inbox-triage` repeats this inside the current conversation while the session
 stays open; each run fires between turns. A run with nothing new prints one line
 (`Inbox: nothing new since 14:20.`) and stops, so a quiet loop stays quiet.
 

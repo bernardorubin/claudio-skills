@@ -1,6 +1,6 @@
 ---
 name: slack-triage
-description: Check the user's Slack for messages that need them (@-mentions and DMs since the last check), then suggest an action for each one — a drafted reply saved through write-slack-message, a Jira ticket to file (checked against Jira first), or nothing — using the context of the conversation it runs in. Suggests only; files and drafts nothing outside the drafts folder without a yes. Use when the user says "check my slack", "anything on slack for me?", "triage my slack", "do I need to reply to anyone", or runs /slack-triage, including on a timer via "/loop 20m /slack-triage".
+description: Check the user's Slack for messages that need them (@-mentions and DMs since the last check), then suggest an action for each one — a drafted reply saved through write-slack-message, a Jira ticket to file (checked against Jira first), or nothing — using the context of the conversation it runs in. Suggests only; files and drafts nothing outside the drafts folder without a yes. Use when the user says "check my slack", "anything on slack for me?", "triage my slack", "do I need to reply to anyone", or runs /slack-triage, including on a timer via "/loop 20m slack-triage". The bare prompt "slack-triage" (what a loop sends) runs it too.
 ---
 
 # Slack Triage
@@ -28,7 +28,7 @@ suggestion to run `investigate`, not a guess.
 
 ## On a timer
 
-`/loop 20m /slack-triage` repeats this inside the current conversation for as long as the
+`/loop 20m slack-triage` repeats this inside the current conversation for as long as the
 session stays open; each run fires between turns, so it never interrupts work in progress.
 A run with nothing new prints one line (`Slack: nothing new since 14:20.`) and stops, so a
 quiet loop stays quiet. A run that finds something keeps its list short, because the user

@@ -1,6 +1,6 @@
 ---
 name: triage
-description: Run slack-triage, inbox-triage and figma-triage together and report one merged, numbered list of what needs the user across Slack, email and Figma (a reply drafted, a Jira ticket to file, or work to do). Suggests only. Use when the user says "triage everything", "check slack, email and figma", "what needs me?", "anything I need to deal with?", or runs /triage, including on a timer via "/loop 1h /triage".
+description: Run slack-triage, inbox-triage and figma-triage together and report one merged, numbered list of what needs the user across Slack, email and Figma (a reply drafted, a Jira ticket to file, or work to do). Suggests only. Use when the user says "triage everything", "check slack, email and figma", "what needs me?", "anything I need to deal with?", or runs /triage, including on a timer via "/loop 1h triage". The bare prompt "triage" (what a loop sends) runs it too.
 ---
 
 # Triage
@@ -32,9 +32,9 @@ Figma.`) and stop.
 
 ## On a timer
 
-`/loop 1h /triage` checks all three every hour in the current conversation. Each source
+`/loop 1h triage` checks all three every hour in the current conversation. Each source
 still looks back to its own last check, so this mixes freely with a faster loop for one
-source (`/loop 20m /slack-triage`) without repeating anything.
+source (`/loop 20m slack-triage`) without repeating anything.
 
 ## Acting on the answer
 

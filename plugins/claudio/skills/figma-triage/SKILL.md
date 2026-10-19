@@ -1,6 +1,6 @@
 ---
 name: figma-triage
-description: Check the Figma comments that need the user (mentions, and replies in threads they're in) and suggest a Jira ticket for each piece of work. Scans every file in the watched Figma projects, groups related comments, checks Jira first (covered, fold in, follow-up or new), and lists the tickets it would file; the ones the user picks are filed with a screenshot of where the comment is pinned and a deep link back to it. Use when the user says "I got Figma notifications, please check", "check my Figma comments", "turn the Figma comments into tickets", "any new Figma comments for me?", or runs /figma-triage with a window (e.g. "/figma-triage 2d"), including on a timer via "/loop 2h /figma-triage". Formerly figma-to-jira.
+description: Check the Figma comments that need the user (mentions, and replies in threads they're in) and suggest a Jira ticket for each piece of work. Scans every file in the watched Figma projects, groups related comments, checks Jira first (covered, fold in, follow-up or new), and lists the tickets it would file; the ones the user picks are filed with a screenshot of where the comment is pinned and a deep link back to it. Use when the user says "I got Figma notifications, please check", "check my Figma comments", "turn the Figma comments into tickets", "any new Figma comments for me?", or runs /figma-triage with a window (e.g. "/figma-triage 2d"), including on a timer via "/loop 2h figma-triage". Formerly figma-to-jira. The bare prompt "figma-triage" (what a loop sends) runs it too.
 ---
 
 # Figma Triage
@@ -30,7 +30,7 @@ just those items, in the same conversation.
 
 ## On a timer
 
-`/loop 2h /figma-triage` repeats this inside the current conversation while
+`/loop 2h figma-triage` repeats this inside the current conversation while
 the session stays open; each run fires between turns. A full scan takes about a minute,
 so hourly or slower is plenty. A run with nothing new prints one line (`Figma: nothing
 new since 14:20.`) and stops, so a quiet loop stays quiet.
