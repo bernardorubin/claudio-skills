@@ -53,6 +53,20 @@ Mentions in, suggestions out. Checks your Slack @-mentions and DMs since the las
 ### `/inbox-triage`
 The Gmail twin of `/slack-triage`. Checks the inbox since the last run, filters hard (most of a work inbox is automated: Jira, Figma and Slack notifications that other skills already triage, marketing, receipts, shared and test inboxes, threads you already answered), and suggests a reply saved as a Gmail draft, a Jira ticket (deduped against Jira) for a person's request or a vendor alert about a system you run (a payment provider reporting failures, a console deadline, a deprecation), or work to investigate. A reply that took on work ("on it") still gets the Jira check, so the work gets a ticket. Suggests only: never sends, archives, labels or marks read; you answer "file 1, send 2". Checks the connected account from the thread links and stops if it's the wrong inbox. `/loop 1h /inbox-triage` repeats it while the session is open. State lives in `~/.config/claudio/inbox-triage-state.json`. `--dry` reports without drafting or saving. Needs the Gmail connector.
 
+### Running the triage skills on a loop
+`/slack-triage`, `/inbox-triage` and `/figma-to-jira --suggest` are built for `/loop`. Run them inside the conversation you're working in, each on its own timer, and every check lands in that conversation with its context:
+
+```
+/loop 20m /slack-triage
+/loop 1h /inbox-triage
+/loop 2h /figma-to-jira --suggest
+```
+
+- **What each check covers**: everything since the previous check. Slack and Gmail add a 10-minute overlap for search lag and drop what was already reported, so on a 20-minute loop a check covers about the last 30 minutes. The first run ever looks back 24 hours (3 days for Figma). After a gap, like a laptop closed overnight, the next run catches up from the last check.
+- **Shared state**: the last check is recorded in `~/.config/claudio/` (`slack-triage-state.json`, `inbox-triage-state.json`, `figma-to-jira-state.json`), so a manual run in another conversation moves the window for the loop too. Pass a window (`/slack-triage 1d`) to re-check a stretch, including items already reported.
+- **Quiet when quiet**: a check with nothing new prints one line. Checks fire between turns, never mid-task, and the loops stop when the session closes.
+- **Suggest only**: nothing is posted, sent or filed until you answer ("file 2, send 1").
+
 ### `/qa`
 QA a ticket or PR and **prove** it — exercise every acceptance criterion against the real running system **through the interface that AC lives behind** (API/CLI with the project's own keys, a data query, or the UI — a browser only when the AC is actually about the UI), capture evidence per AC, then **publish** a pass / fail / **could not verify** report with the evidence embedded inline — to the Jira ticket, the GitHub PR, both, or a Slack thread, **asking you where when it isn't obvious** rather than silently picking. Enforces three lines: evidence per AC or it isn't a pass, a **baseline before you conclude** (so a pre-existing failure never gets called a regression), and never claiming more than you proved. Opens the source spec when the ticket cites one, because a ticket's paraphrase of a PRD is not the PRD. Reports only — never merges or deploys. Auto-triggers on "QA this ticket", "verify the ACs", "test this and show me it works", "can we QA it ourselves before shipping".
 
