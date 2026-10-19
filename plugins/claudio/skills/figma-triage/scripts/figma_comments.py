@@ -36,7 +36,10 @@ import urllib.request
 API = "https://api.figma.com/v1"
 CONFIG_DIR = os.path.expanduser("~/.config/claudio")
 CONFIG = os.path.join(CONFIG_DIR, "figma.json")
-STATE = os.path.join(CONFIG_DIR, "figma-to-jira-state.json")
+STATE = os.path.join(CONFIG_DIR, "figma-triage-state.json")
+# ponytail: one-time migration from the skill's old name (figma-to-jira); drop once nobody runs a pre-rename build
+if not os.path.exists(STATE) and os.path.exists(os.path.join(CONFIG_DIR, "figma-to-jira-state.json")):
+    os.rename(os.path.join(CONFIG_DIR, "figma-to-jira-state.json"), STATE)
 PROFILES = ["~/.zshrc", "~/.zprofile", "~/.zshenv", "~/.bashrc", "~/.bash_profile", "~/.profile"]
 
 

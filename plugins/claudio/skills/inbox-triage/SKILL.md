@@ -61,7 +61,7 @@ Group by thread, and group separate threads about one topic (a vendor alert and 
 colleague forwarding the same alert are one item). Then skip, and count:
 
 - **Notifications another tool already triages**: Jira, Figma comment emails, Slack,
-  GitHub. Those are covered by `slack-triage`, `figma-to-jira` and the tracker itself.
+  GitHub. Those are covered by `slack-triage`, `figma-triage` and the tracker itself.
 - **Threads the user has replied to** after the newest incoming message (the search shows
   their `SENT` message in the thread), unless the reply took on work ("on it", "I'll fix
   it"). Those still get the Jira check in Step 5, and a ticket suggestion when the work has
