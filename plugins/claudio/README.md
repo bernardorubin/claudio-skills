@@ -364,8 +364,8 @@ Context       ━━━━──────────────  14%  used 
 5-hour limit  ━━━───────────────  18%  used · resets in 4h 51m
 ```
 
-- **Context**: context window used. Orange from 60%, red from 85%.
-- **5-hour limit**: how much of the 5-hour rate-limit window you've used, filling from empty as you go. Orange from 75% used, red from 90% used. Shows "no reading yet" until the first reply (and off a subscription).
+- **Context**: context window used. Green, then yellow from 40%, orange from 60%, red from 85%.
+- **5-hour limit**: how much of the 5-hour rate-limit window you've used, filling from empty as you go. Green, then yellow from 50% used, orange from 75%, red from 90%. Shows "no reading yet" until the first reply (and off a subscription).
 
 Desktop draws SVG bars; the terminal draws `■□` bars. Updates after every turn, and the reset countdown ticks every minute. Collapse it with `[-]` or ctrl+x ctrl+a.
 
@@ -375,7 +375,8 @@ Off by default, since another plugin's band (a skin, say) may want that spot: tu
 
 A small pixel pet on the band's right edge, showing at a glance whether Claude needs you:
 
-- **Working** (blue): acts out the running tool. Thinking (no tool) hops with thought dots; Read, Grep, Glob and web fetches put on glasses and read a turning book; Edit and Write scribble with a pencil; Bash and every other tool swing a hammer.
+- **Working** (blue): acts out the running tool, with glasses on for focused work. Read, Grep and Glob read a turning book; web searches and fetches sweep a magnifying glass; Edit and Write scribble with a pencil; plans and todos tick a clipboard; browser tools type on a laptop; subagents juggle three balls; skills wave a wand; Slack, mail and notifications throw a paper plane; Bash and every other tool swing a hammer. Between tools it puts on a sweatband and plays something different each time (basketball, keepy-uppy, weights, jump rope), or hops with thought dots.
+- **Detail**: a sheen and a shadow give the body volume, and it gets rosy cheeks on your turn.
 - **Your turn** (green): smiles and blinks now and then once the turn is done.
 - **Needs you** (orange): open mouth and a flashing "!" while a permission dialog, a question (AskUserQuestion) or a plan to approve (ExitPlanMode) waits on you.
 

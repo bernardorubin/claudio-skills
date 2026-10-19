@@ -37,6 +37,28 @@ test('grows with the context, tires near the 5-hour limit, and picks a prop by t
   expect(petFrame('working', lookOf(10, 10, 'Read'), 0)).toContain('📖')
 })
 
+test('plays a different sport between tools, and wears glasses for focused work', async () => {
+  expect([0, 1, 2, 3, 4, 5].map(n => activityOf(null, n))).toEqual(['think', 'basketball', 'soccer', 'weights', 'jumprope', 'think'])
+  expect(activityOf('WebSearch')).toBe('search')
+  const tools = ['Agent', 'mcp__Claude_Browser__navigate', 'mcp__slack__slack_send_message', 'TodoWrite', 'Skill', 'Bash']
+  expect(tools.map(t => activityOf(t))).toEqual(['juggle', 'browse', 'send', 'plan', 'cast', 'build'])
+  for (const tool of tools.slice(0, 5)) {
+    const look = lookOf(10, 10, tool)
+    expect(petSvg('working', look)).toContain('class="f2"')
+    expect(petFrame('working', look, 0)).not.toBe(petFrame('working', look, 1))
+  }
+  for (const n of [1, 2, 3, 4]) {
+    const look = lookOf(10, 10, null, n)
+    expect(petSvg('working', look)).toContain('class="f2"')
+    expect(petSvg('working', look)).toContain('#bf616a') // sweatband
+    expect(petFrame('working', look, 0)).not.toBe(petFrame('working', look, 1))
+  }
+  // the rope swings in step with the hop
+  expect(petSvg('working', lookOf(10, 10, null, 4))).toContain('.b{animation:hop')
+  for (const tool of ['Read', 'WebSearch', 'Edit']) expect(petSvg('working', lookOf(10, 10, tool))).toContain('#eceff4')
+  expect(petSvg('working', lookOf(10, 10, 'Bash'))).not.toContain('#bf616a')
+})
+
 test('suggests /compact or /clear on your turn once the context fills', async () => {
   expect(captionOf('waiting', 59)).toBe('Your turn')
   expect(captionOf('waiting', 72)).toBe('Context 72% full: try /compact or /clear')

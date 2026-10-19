@@ -4,7 +4,7 @@ import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit }
 import type { Draft, UsageSnap } from '../types'
 import { clipboardScript, labelOf, mentionBlocks, splitDraft } from './slack-html'
 import { captionOf, lookOf, moodOf, petColor, petFrame, petPx, petSvg } from './pet'
-import { BAR_PX, BLUE, ROW_PX, bar, svgBar, timeLeft, tokens, tone } from './usage-bars'
+import { BAR_PX, GREEN, ROW_PX, bar, svgBar, timeLeft, tokens, tone } from './usage-bars'
 
 // Two mods in one module: the engine loads one hooks module per plugin, allows
 // one unmatched session.start hook, and never follows $ across an import, so
@@ -185,6 +185,8 @@ const blockedOn = atom({ plugin: 'claudio', key: 'blocked' } as const, null)
 const petTick = atom({ plugin: 'claudio', key: 'tick' } as const, 0)
 // The tool running now, which picks the pet's prop (glasses and a book, a pencil, a hammer).
 const runningTool = atom({ plugin: 'claudio', key: 'tool' } as const, null)
+// Tools ended so far, which picks what the pet plays between them.
+const plays = atom({ plugin: 'claudio', key: 'plays' } as const, 0)
 
 const block = async ($: EngineInterface, tool: string) => {
   if ((await read($, blockedOn)) !== tool) await update($, blockedOn, () => tool)
@@ -249,7 +251,10 @@ export const register: Register = (on, options) => {
       if (showPet) {
         await unblock($, e.tool)
         // ponytail: parallel calls hand the prop to whichever started last, and the first to end puts it down
-        if ((await read($, runningTool)) === e.tool) await update($, runningTool, () => null)
+        if ((await read($, runningTool)) === e.tool) {
+          await update($, plays, n => n + 1)
+          await update($, runningTool, () => null)
+        }
       }
     }
     if (!isDraft) return ran
@@ -363,9 +368,9 @@ export const register: Register = (on, options) => {
         const ctxPct = Math.round(s.context.percent ?? 0)
         const ctxTokens = s.context.tokens === undefined ? '—' : tokens(s.context.tokens)
         const used = Math.round(s.fiveHour?.percentUsed ?? 0)
-        const ctxTone = tone(ctxPct, 60, 85)
-        const fiveTone = tone(used, 75, 90)
-        const alert = (c: string) => (c === BLUE ? undefined : c)
+        const ctxTone = tone(ctxPct, 40, 60, 85)
+        const fiveTone = tone(used, 50, 75, 90)
+        const alert = (c: string) => (c === GREEN ? undefined : c)
         const fiveDetail =
           s.fiveHour === null ? 'no reading yet' : `used · resets in ${timeLeft(s.fiveHour.resetsAt, s.now)}`
 
@@ -401,9 +406,10 @@ export const register: Register = (on, options) => {
       // The pet grows with the context and tires as the 5-hour window runs low.
       const ctxPct = Math.round(snapped?.context.percent ?? 0)
       const tool = mood === 'working' ? await read($, runningTool) : null
-      const look = lookOf(ctxPct, snapped?.fiveHour?.percentUsed ?? 0, tool)
+      const played = mood === 'working' && tool === null ? await read($, plays) : 0
+      const look = lookOf(ctxPct, snapped?.fiveHour?.percentUsed ?? 0, tool, played)
       const caption = mood === null ? '' : captionOf(mood, ctxPct)
-      const captionColor = mood === 'blocked' ? petColor(mood) : caption.includes('/compact') ? tone(ctxPct, 60, 85) : undefined
+      const captionColor = mood === 'blocked' ? petColor(mood) : caption.includes('/compact') ? tone(ctxPct, 40, 60, 85) : undefined
       // ponytail: the pet gives way when the band is too narrow for both
       const petFits = mood !== null && (s === null || e.props.bodyColumns >= 70 + caption.length)
       // read only on the terminal, so the desktop's band never redraws on the tick

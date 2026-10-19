@@ -1,7 +1,8 @@
 // The usage band's drawing helpers; its hooks live in register.tsx.
 
 const WIDTH = 20
-export const BLUE = '#88c0d0'
+export const GREEN = '#a3be8c'
+const YELLOW = '#ebcb8b'
 const ORANGE = '#d08770'
 const RED = '#bf616a'
 
@@ -20,7 +21,8 @@ export const timeLeft = (resetsAt: string | undefined, now: number) => {
   return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`
 }
 
-export const tone = (pct: number, warn: number, crit: number) => (pct >= crit ? RED : pct >= warn ? ORANGE : BLUE)
+export const tone = (pct: number, caution: number, warn: number, crit: number) =>
+  pct >= crit ? RED : pct >= warn ? ORANGE : pct >= caution ? YELLOW : GREEN
 
 export const BAR_PX = 160
 export const ROW_PX = 18

@@ -14,13 +14,15 @@ test('bars, token counts and countdown format', async () => {
   expect(timeLeft(undefined, now)).toBe('resetting')
 })
 
-test('turns orange near the limit and red at it', async () => {
-  // context: 60 / 85
-  expect(tone(59, 60, 85)).toBe('#88c0d0')
-  expect(tone(60, 60, 85)).toBe('#d08770')
-  expect(tone(85, 60, 85)).toBe('#bf616a')
-  // 5-hour window, by % used: 75 / 90
-  expect(tone(74, 75, 90)).toBe('#88c0d0')
-  expect(tone(75, 75, 90)).toBe('#d08770')
-  expect(tone(92, 75, 90)).toBe('#bf616a')
+test('goes green, yellow, orange, red as each fills', async () => {
+  // context: 40 / 60 / 85
+  expect(tone(39, 40, 60, 85)).toBe('#a3be8c')
+  expect(tone(40, 40, 60, 85)).toBe('#ebcb8b')
+  expect(tone(60, 40, 60, 85)).toBe('#d08770')
+  expect(tone(85, 40, 60, 85)).toBe('#bf616a')
+  // 5-hour window, by % used: 50 / 75 / 90
+  expect(tone(49, 50, 75, 90)).toBe('#a3be8c')
+  expect(tone(50, 50, 75, 90)).toBe('#ebcb8b')
+  expect(tone(75, 50, 75, 90)).toBe('#d08770')
+  expect(tone(92, 50, 75, 90)).toBe('#bf616a')
 })
