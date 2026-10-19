@@ -1,6 +1,6 @@
 ---
 name: figma-to-jira
-description: Turn the Figma comments that need the user (mentions, and replies in threads they're in) into Jira tickets. Scans every file in the watched Figma projects, finds where each comment is pinned, screenshots that spot, groups related comments into one ticket, skips anything already ticketed, and files the rest with the screenshot and a deep link back to the comment. Use when the user says "I got Figma notifications, please check", "check my Figma comments", "turn the Figma comments into tickets", "any new Figma comments for me?", or runs /figma-to-jira with a window (e.g. "/figma-to-jira 2d").
+description: Turn the Figma comments that need the user (mentions, and replies in threads they're in) into Jira tickets. Scans every file in the watched Figma projects, finds where each comment is pinned, screenshots that spot, groups related comments into one ticket, skips anything already ticketed, and files the rest with the screenshot and a deep link back to the comment. Use when the user says "I got Figma notifications, please check", "check my Figma comments", "turn the Figma comments into tickets", "any new Figma comments for me?", or runs /figma-to-jira with a window (e.g. "/figma-to-jira 2d"), including on a timer via "/loop 2h /figma-to-jira --suggest", which lists the tickets it would file and files only the ones the user picks.
 ---
 
 # Figma to Jira
@@ -20,6 +20,17 @@ from the Figma MCP (`get_screenshot`, `get_metadata`), and building the change i
 - `--all`: every new comment in the window, not only mentions and replies.
 - `--dry`: report the grouping and the dedupe verdicts, file nothing, and don't move
   the default window forward.
+- `--suggest`: like `--dry`, but the window moves forward, so the next run only shows
+  what's new, and the report is a numbered list the user answers ("file 2, 3"). Filing
+  then runs Steps 5 and 6 for just those items, in the same conversation. This is the
+  mode for a timer.
+
+## On a timer
+
+`/loop 2h /figma-to-jira --suggest` repeats this inside the current conversation while
+the session stays open; each run fires between turns. A full scan takes about a minute,
+so hourly or slower is plenty. A run with nothing new prints one line (`Figma: nothing
+new since 14:20.`) and stops, so a quiet loop stays quiet.
 
 ## Setup (once per person)
 
@@ -80,6 +91,9 @@ or `~/.config/claudio/figma-token`. The script never prints it; never print it y
 A full project scan takes about a minute (one comments call per file). Report the counts
 first: files scanned, threads found, the window, and how old the saved file list is.
 
+Under `--suggest`, pass `--save-run` on this scan: it records the time the scan started,
+so nothing that arrives during the run is skipped next time.
+
 ## Step 2: Read each thread and decide what it is
 
 Read the whole thread, not just the new comment. Sort each one:
@@ -137,6 +151,9 @@ see why nothing was filed for a comment.
 
 ## Step 5: Screenshot the spot
 
+Under `--dry` and `--suggest`, skip Steps 5 and 6 and go to the report; `--suggest` comes
+back here for the items the user picks.
+
 For each thread, with the Figma MCP (`get_screenshot`, `fileKey` and node id):
 
 - **Node at most about 2000px tall**: screenshot the node itself.
@@ -177,10 +194,14 @@ Title: `[FE]`/`[BE]`/`[Content]` plus the change in plain words. Add the label
 `figma-comment`. No local paths anywhere in the ticket. After filing, GET each ticket and
 check the parent, component, sprint, label and image landed.
 
-When filing worked (not `--dry`), re-run the scan with `--save-run` and the same window,
-so the next default window starts from this run.
+When filing worked in a normal run (not `--dry` or `--suggest`), re-run the scan with
+`--save-run` and the same window, so the next default window starts from this run.
 
 ## Step 7: Report
+
+Under `--suggest`, one numbered line per proposed ticket or comment (who, which screen,
+the verdict, the proposed title, the link), then the questions and the skipped count, so
+the user can answer "file 1, 3". Otherwise:
 
 - New tickets: a link and one line each, with how many comments each one groups.
 - Existing tickets that got a comment: a link, the verdict (covered or folded in), and
@@ -194,4 +215,5 @@ so the next default window starts from this run.
   a reply in the user's name is theirs to send.
 - Never file a question as a ticket, and never state what the designer meant beyond
   what the comment and the frame show.
-- `--dry` writes nothing: no tickets, no comments, no saved run.
+- `--dry` writes nothing: no tickets, no comments, no saved run. `--suggest` writes only
+  the saved run until the user picks items to file.
