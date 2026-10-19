@@ -1,5 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 
+import { clipboardScript } from './slack-html'
+
 const DIR = '/Users/test/Desktop/slack-drafts'
 const DRAFT = 'Both are on staging.\n\n[HPY-1](https://example.com/HPY-1) is fixed, `pay_today` is `true`.'
 const PANE = {
@@ -56,12 +58,15 @@ test('shows where to post above the message and copies the message alone', async
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'claudio', surface, ...PANE })
     expect(await ui.find({ key: `where-${NAME}` })).toBeDefined()
+    expect(await ui.find({ type: 'Markdown', text: '`@Nick` fixed it' })).toBeDefined()
     await ui.press({ key: `copy-${NAME}` })
     await ui.unmount()
   }
   const script = runs[0]?.join(' ') ?? ''
   expect(script).toContain('@Nick fixed it')
   expect(script).not.toContain('post_in')
+  // the pane's mention highlight is display-only: the copy stays exactly the draft
+  expect(script).toBe(`osascript -e ${clipboardScript('@Nick fixed it')}`)
 })
 
 test('drops a draft deleted from another session on the next poll', async ($, on) => {

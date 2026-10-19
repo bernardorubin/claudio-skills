@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { clipboardScript, labelOf, splitDraft, toHtml, toPlain } from './slack-html'
+import { clipboardScript, labelOf, markMentions, splitDraft, toHtml, toPlain } from './slack-html'
 
 test('converts the skill vocabulary to Slack HTML', async () => {
   const got = toHtml('see [HPY-1](https://x.test) and `a<b`\n\n- one\n- two\n\n```\nx=1\n```')
@@ -34,6 +34,12 @@ test('flattens for a plain-text paste on the phone', async () => {
   expect(flat).not.toContain('`')
   expect(flat).toContain('- a tok')
   expect(toPlain('`[x](https://y.test)`').trim()).toBe('[x](https://y.test)')
+})
+
+test('marks @mentions for the pane', async () => {
+  expect(markMentions('@chuy and (@jesus.garcia), ping @Nick.')).toBe('`@chuy` and (`@jesus.garcia`), ping `@Nick`.')
+  expect(markMentions('mail bern@x.test or `@kept`')).toBe('mail bern@x.test or `@kept`')
+  expect(markMentions('```\n@inside\n```\n@out')).toBe('```\n@inside\n```\n`@out`')
 })
 
 test('splits where to post from the message', async () => {

@@ -71,6 +71,25 @@ export const toHtml = (md: string) => {
   return out.join('')
 }
 
+// Pane display only: a typed @name pastes into Slack as plain text, not a tag, so each
+// one is drawn as inline code (Markdown has no span color) to be re-tagged after pasting.
+// Emails, code spans and fences are left alone.
+const MENTION = /(^|[\s(])(@\w+(?:[.-]\w+)*)/g
+export const markMentions = (md: string) => {
+  let inCode = false
+  return md
+    .split('\n')
+    .map(line => {
+      if (line.trimStart().startsWith('```')) inCode = !inCode
+      if (inCode || line.trimStart().startsWith('```')) return line
+      return line
+        .split(CODE_SPAN)
+        .map((part, i) => (i % 2 ? `\`${part}\`` : part.replace(MENTION, '$1`$2`')))
+        .join('')
+    })
+    .join('\n')
+}
+
 // Markdown to plain text, for a plain-text paste (the phone), where iOS Slack
 // converts nothing. Links collapse to the bare URL, fence/quote markers and backticks go.
 export const toPlain = (md: string) => {

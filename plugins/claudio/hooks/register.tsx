@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit } from 'claude-code'
 
 import type { Draft, UsageSnap } from '../types'
-import { clipboardScript, labelOf, splitDraft } from './slack-html'
+import { clipboardScript, labelOf, markMentions, splitDraft } from './slack-html'
 import { captionOf, lookOf, moodOf, petColor, petFrame, petPx, petSvg } from './pet'
 import { BAR_PX, BLUE, ROW_PX, bar, svgBar, timeLeft, tokens, tone } from './usage-bars'
 
@@ -281,7 +281,7 @@ export const register: Register = (on, options) => {
                 {when !== '' && <Text dimColor wrap="truncate-end">{when}</Text>}
               </Box>
               {where !== '' && <Markdown key={`where-${d.name}`} text={where} dimColor />}
-              <Markdown text={body} />
+              <Markdown text={markMentions(body)} />
               <Box gap={1} flexWrap="wrap">
                 <Button key={`copy-${d.name}`} label="Copy for Slack" variant="primary" onPress={() => copyForSlack($, d)} />
                 <Button key={`del-${d.name}`} label="Delete" plain dimColor onPress={() => trash($, d, phoneUrl)} />
