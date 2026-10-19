@@ -362,13 +362,12 @@ export const register: Register = (on, options) => {
       const usage = (s: UsageSnap) => {
         const ctxPct = Math.round(s.context.percent ?? 0)
         const ctxTokens = s.context.tokens === undefined ? '—' : tokens(s.context.tokens)
-        const used = s.fiveHour?.percentUsed ?? 0
-        const left = Math.round(100 - used)
+        const used = Math.round(s.fiveHour?.percentUsed ?? 0)
         const ctxTone = tone(ctxPct, 60, 85)
         const fiveTone = tone(used, 75, 90)
         const alert = (c: string) => (c === BLUE ? undefined : c)
         const fiveDetail =
-          s.fiveHour === null ? 'no reading yet' : `left · resets in ${timeLeft(s.fiveHour.resetsAt, s.now)}`
+          s.fiveHour === null ? 'no reading yet' : `used · resets in ${timeLeft(s.fiveHour.resetsAt, s.now)}`
 
         // ponytail: columns, not rows, so labels and bars line up on any font
         return (
@@ -379,14 +378,14 @@ export const register: Register = (on, options) => {
             </Box>
             <Box flexDirection="column">
               {meter(ctxPct, ctxTone, `context ${ctxPct}% used`)}
-              {meter(s.fiveHour === null ? 0 : left, fiveTone, `5-hour window ${left}% left`)}
+              {meter(used, fiveTone, `5-hour window ${used}% used`)}
             </Box>
             <Box flexDirection="column" alignItems="flex-end">
               <Text bold color={alert(ctxTone)}>
                 {ctxPct}%
               </Text>
               <Text bold color={alert(fiveTone)}>
-                {s.fiveHour === null ? '—' : `${left}%`}
+                {s.fiveHour === null ? '—' : `${used}%`}
               </Text>
             </Box>
             <Box flexDirection="column">
