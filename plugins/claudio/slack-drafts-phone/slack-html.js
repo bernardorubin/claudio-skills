@@ -22,7 +22,7 @@ var SlackHtml = (() => {
   __export(slack_html_exports, {
     clipboardScript: () => clipboardScript,
     labelOf: () => labelOf,
-    markMentions: () => markMentions,
+    mentionBlocks: () => mentionBlocks,
     splitDraft: () => splitDraft,
     toHtml: () => toHtml,
     toPlain: () => toPlain
@@ -84,14 +84,40 @@ var SlackHtml = (() => {
     closeList();
     return out.join("");
   };
-  var MENTION = /(^|[\s(])(@\w+(?:[.-]\w+)*)/g;
-  var markMentions = (md) => {
+  var MENTION = /(?<=^|[\s(])(@\w+(?:[.-]\w+)*)/;
+  var MARKER = /^(\s*(?:\d+\.\s+|[-*]\s+|>\s?))?(.*)$/;
+  var runsOf = (line) => line.split(CODE_SPAN).flatMap((part, i) => {
+    if (i % 2) return [{ text: part, kind: "code" }];
+    const bits = part.split(LINK);
+    return bits.flatMap(
+      (bit, j) => j % 3 === 1 ? [{ text: bit, kind: "link", href: bits[j + 1] ?? "" }] : j % 3 === 2 ? [] : bit.split(MENTION).map((text, k) => k % 2 ? { text, kind: "mention" } : { text })
+    );
+  }).filter((r) => r.text !== "");
+  var bullet = (mark) => {
+    const m = mark.trim();
+    return m === "" ? "" : m === ">" ? "\u2502 " : /\d/.test(m) ? `${m} ` : "\u2022 ";
+  };
+  var mentionBlocks = (md) => {
+    const out = [];
+    let buf = [];
     let inCode = false;
-    return md.split("\n").map((line) => {
-      if (line.trimStart().startsWith("```")) inCode = !inCode;
-      if (inCode || line.trimStart().startsWith("```")) return line;
-      return line.split(CODE_SPAN).map((part, i) => i % 2 ? `\`${part}\`` : part.replace(MENTION, "$1`$2`")).join("");
-    }).join("\n");
+    const flush = () => {
+      if (buf.join("").trim()) out.push({ md: buf.join("\n") });
+      buf = [];
+    };
+    for (const line of md.split(/\r?\n/)) {
+      const fence = line.trimStart().startsWith("```");
+      if (fence) inCode = !inCode;
+      if (inCode || fence || !line.split(CODE_SPAN).some((p, i) => i % 2 === 0 && MENTION.test(p))) {
+        buf.push(line);
+        continue;
+      }
+      flush();
+      const [, mark = "", rest = ""] = MARKER.exec(line) ?? [];
+      out.push({ prefix: bullet(mark), runs: runsOf(rest) });
+    }
+    flush();
+    return out;
   };
   var toPlain = (md) => {
     const out = [];

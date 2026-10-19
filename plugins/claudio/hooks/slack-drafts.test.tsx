@@ -58,7 +58,7 @@ test('shows where to post above the message and copies the message alone', async
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'claudio', surface, ...PANE })
     expect(await ui.find({ key: `where-${NAME}` })).toBeDefined()
-    expect(await ui.find({ type: 'Markdown', text: '`@Nick` fixed it' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '@Nick' })).toBeDefined()
     await ui.press({ key: `copy-${NAME}` })
     await ui.unmount()
   }

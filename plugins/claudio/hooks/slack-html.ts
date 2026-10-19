@@ -71,23 +71,57 @@ export const toHtml = (md: string) => {
   return out.join('')
 }
 
-// Pane display only: a typed @name pastes into Slack as plain text, not a tag, so each
-// one is drawn as inline code (Markdown has no span color) to be re-tagged after pasting.
-// Emails, code spans and fences are left alone.
-const MENTION = /(^|[\s(])(@\w+(?:[.-]\w+)*)/g
-export const markMentions = (md: string) => {
-  let inCode = false
-  return md
-    .split('\n')
-    .map(line => {
-      if (line.trimStart().startsWith('```')) inCode = !inCode
-      if (inCode || line.trimStart().startsWith('```')) return line
-      return line
-        .split(CODE_SPAN)
-        .map((part, i) => (i % 2 ? `\`${part}\`` : part.replace(MENTION, '$1`$2`')))
-        .join('')
+// Pane display only: a typed @name pastes into Slack as plain text, not a tag, so the pane
+// colors each one to be re-tagged after pasting. Markdown cannot color a word, so a line
+// with a mention becomes Text runs (its list or quote marker as `prefix`) and every other
+// line stays Markdown. Emails, code spans and fences are left alone.
+const MENTION = /(?<=^|[\s(])(@\w+(?:[.-]\w+)*)/
+const MARKER = /^(\s*(?:\d+\.\s+|[-*]\s+|>\s?))?(.*)$/
+export type Run = { text: string; kind?: 'mention' | 'code' | 'link'; href?: string }
+export type Block = { md: string } | { prefix: string; runs: Run[] }
+
+const runsOf = (line: string): Run[] =>
+  line
+    .split(CODE_SPAN)
+    .flatMap((part, i): Run[] => {
+      if (i % 2) return [{ text: part, kind: 'code' }]
+      const bits = part.split(LINK) // text, label, url, text, ...
+      return bits.flatMap((bit, j): Run[] =>
+        j % 3 === 1
+          ? [{ text: bit, kind: 'link', href: bits[j + 1] ?? '' }]
+          : j % 3 === 2
+            ? []
+            : bit.split(MENTION).map((text, k): Run => (k % 2 ? { text, kind: 'mention' } : { text })),
+      )
     })
-    .join('\n')
+    .filter(r => r.text !== '')
+
+const bullet = (mark: string) => {
+  const m = mark.trim()
+  return m === '' ? '' : m === '>' ? '│ ' : /\d/.test(m) ? `${m} ` : '• '
+}
+
+export const mentionBlocks = (md: string): Block[] => {
+  const out: Block[] = []
+  let buf: string[] = []
+  let inCode = false
+  const flush = () => {
+    if (buf.join('').trim()) out.push({ md: buf.join('\n') })
+    buf = []
+  }
+  for (const line of md.split(/\r?\n/)) {
+    const fence = line.trimStart().startsWith('```')
+    if (fence) inCode = !inCode
+    if (inCode || fence || !line.split(CODE_SPAN).some((p, i) => i % 2 === 0 && MENTION.test(p))) {
+      buf.push(line)
+      continue
+    }
+    flush()
+    const [, mark = '', rest = ''] = MARKER.exec(line) ?? []
+    out.push({ prefix: bullet(mark), runs: runsOf(rest) })
+  }
+  flush()
+  return out
 }
 
 // Markdown to plain text, for a plain-text paste (the phone), where iOS Slack

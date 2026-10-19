@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { clipboardScript, labelOf, markMentions, splitDraft, toHtml, toPlain } from './slack-html'
+import { clipboardScript, labelOf, mentionBlocks, splitDraft, toHtml, toPlain } from './slack-html'
 
 test('converts the skill vocabulary to Slack HTML', async () => {
   const got = toHtml('see [HPY-1](https://x.test) and `a<b`\n\n- one\n- two\n\n```\nx=1\n```')
@@ -36,10 +36,25 @@ test('flattens for a plain-text paste on the phone', async () => {
   expect(toPlain('`[x](https://y.test)`').trim()).toBe('[x](https://y.test)')
 })
 
-test('marks @mentions for the pane', async () => {
-  expect(markMentions('@chuy and (@jesus.garcia), ping @Nick.')).toBe('`@chuy` and (`@jesus.garcia`), ping `@Nick`.')
-  expect(markMentions('mail bern@x.test or `@kept`')).toBe('mail bern@x.test or `@kept`')
-  expect(markMentions('```\n@inside\n```\n@out')).toBe('```\n@inside\n```\n`@out`')
+test('splits @mention lines into colored runs for the pane', async () => {
+  expect(mentionBlocks('no tags, mail bern@x.test or `@kept`')).toEqual([{ md: 'no tags, mail bern@x.test or `@kept`' }])
+  expect(mentionBlocks('@chuy see [HPY-1](https://x.test), `pay` (@jesus.garcia).')).toEqual([
+    {
+      prefix: '',
+      runs: [
+        { text: '@chuy', kind: 'mention' },
+        { text: ' see ' },
+        { text: 'HPY-1', kind: 'link', href: 'https://x.test' },
+        { text: ', ' },
+        { text: 'pay', kind: 'code' },
+        { text: ' (' },
+        { text: '@jesus.garcia', kind: 'mention' },
+        { text: ').' },
+      ],
+    },
+  ])
+  const blocks = mentionBlocks('intro\n\n2. waiting on @Dmytro\n> @here hi\n```\n@inside\n```')
+  expect(blocks.map(b => ('md' in b ? b.md : b.prefix))).toEqual(['intro\n', '2. ', '│ ', '```\n@inside\n```'])
 })
 
 test('splits where to post from the message', async () => {

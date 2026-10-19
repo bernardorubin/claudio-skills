@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit } from 'claude-code'
 
 import type { Draft, UsageSnap } from '../types'
-import { clipboardScript, labelOf, markMentions, splitDraft } from './slack-html'
+import { clipboardScript, labelOf, mentionBlocks, splitDraft } from './slack-html'
 import { captionOf, lookOf, moodOf, petColor, petFrame, petPx, petSvg } from './pet'
 import { BAR_PX, BLUE, ROW_PX, bar, svgBar, timeLeft, tokens, tone } from './usage-bars'
 
@@ -260,7 +260,7 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e)) // never block a tool call; next replays its result
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button, Markdown } = $.ui.resolve(e)
+    const { Box, Text, Button, Link, Markdown } = $.ui.resolve(e)
     const list = await read($, drafts)
 
     if (list.length === 0) {
@@ -281,7 +281,28 @@ export const register: Register = (on, options) => {
                 {when !== '' && <Text dimColor wrap="truncate-end">{when}</Text>}
               </Box>
               {where !== '' && <Markdown key={`where-${d.name}`} text={where} dimColor />}
-              <Markdown text={markMentions(body)} />
+              <Box flexDirection="column" gap={1}>
+                {mentionBlocks(body).map(b =>
+                  'md' in b ? (
+                    <Markdown text={b.md} />
+                  ) : (
+                    <Text>
+                      {b.prefix}
+                      {b.runs.map(r =>
+                        r.kind === 'mention' ? (
+                          <Text color="merged">{r.text}</Text>
+                        ) : r.kind === 'code' ? (
+                          <Text mono>{r.text}</Text>
+                        ) : r.kind === 'link' ? (
+                          <Link href={r.href ?? ''} label={r.text} />
+                        ) : (
+                          r.text
+                        ),
+                      )}
+                    </Text>
+                  ),
+                )}
+              </Box>
               <Box gap={1} flexWrap="wrap">
                 <Button key={`copy-${d.name}`} label="Copy for Slack" variant="primary" onPress={() => copyForSlack($, d)} />
                 <Button key={`del-${d.name}`} label="Delete" plain dimColor onPress={() => trash($, d, phoneUrl)} />
