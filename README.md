@@ -63,6 +63,8 @@ Everything is a **skill** — no `claudio:` prefix needed when invoking. Skills 
 
 The plugin also bundles one subagent: `code-reviewer`, the parallel review agent `/pr-review` launches for its focus-area passes.
 
+**Built for `/loop`.** `/slack-triage`, `/inbox-triage` and `/figma-to-jira --suggest` each check everything since their last run and suggest instead of acting, so they can run on their own timers inside the conversation you are working in: `/loop 20m /slack-triage`, `/loop 1h /inbox-triage`, `/loop 2h /figma-to-jira --suggest`. See [Running the triage skills on a loop](plugins/claudio/README.md#running-the-triage-skills-on-a-loop) for what each check covers.
+
 See [`plugins/claudio/README.md`](plugins/claudio/README.md) for full details on every skill, the PR review modes (PR / local / full-repo), and the iterative review loop.
 
 ## Mods
