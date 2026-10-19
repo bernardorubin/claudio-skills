@@ -1,20 +1,36 @@
 ---
 name: vercel-triage
-description: Sweep a Vercel project's runtime logs (production and staging/preview) for errors and warnings over the last N hours, group them into distinct issues, drop the noise, check Jira for tickets that already cover each one, then file new Jira bugs for the rest and comment recurrences on the existing ones. Use when the user asks to "check the Vercel logs for errors and make tickets", "triage the Vercel errors", "turn the log errors into tickets", "what's erroring on prod/staging in the last 24h", or runs /vercel-triage with an hour count (e.g. "/vercel-triage 48").
+description: Sweep a Vercel project's runtime logs (production and staging/preview) for errors and warnings since the last check (or the last N hours), group them into distinct issues, drop the noise, check Jira for tickets that already cover each one, and suggest a new bug, a recurrence comment or a close for each; the ones the user picks are filed. Use when the user asks to "check the Vercel logs for errors and make tickets", "triage the Vercel errors", "turn the log errors into tickets", "what's erroring on prod/staging in the last 24h", or runs /vercel-triage with an hour count (e.g. "/vercel-triage 48"), including on a timer via "/loop 1h vercel-triage". The bare prompt "vercel-triage" (what a loop sends) runs it too.
 ---
 
 # Vercel Triage
 
-Logs in, tickets out. Read the runtime logs for a window, turn each distinct problem
-into one Jira ticket, and never file a second ticket for something already tracked.
+Logs in, suggestions out. Read the runtime logs for a window, propose one Jira ticket per
+distinct problem, and never propose a second ticket for something already tracked. It
+suggests by default, like `slack-triage`, `inbox-triage` and `figma-triage`: the user picks
+what gets filed, commented or closed.
 
 Conductor, not the orchestra: Jira reads/writes follow `jira-cli`; a finding that
 needs real diagnosis is flagged for `investigate`, not diagnosed here.
 
 ## Arguments
 
-- **Hours** (first number, default `24`). Error clusters (`get_runtime_errors`) go back 7 days; runtime logs go back as far as the team's retention (30 days with Observability Plus, 1 day on plain Pro). Check the retention in the repo's CLAUDE.md or vault before assuming it.
-- `--dry` : report the grouped findings and the dedupe verdicts, file nothing.
+- **Hours** (first number). Default: since the last run, else `24`. The last run is
+  `last_run` (Unix seconds) in `~/.config/claudio/vercel-triage-state.json`; write it at the
+  end of every run except `--dry`, as the time the run's log queries started. Error clusters (`get_runtime_errors`) go back 7 days; runtime logs go back as far as the team's retention (30 days with Observability Plus, 1 day on plain Pro). Check the retention in the repo's CLAUDE.md or vault before assuming it.
+- `--file` : file, comment and close without asking, the skill's behaviour before it
+  suggested by default.
+- `--dry` : report the grouped findings and the dedupe verdicts, file nothing, and don't
+  move the window.
+
+By default a run reports a numbered list the user answers ("file 1, close 3"); Steps 5
+and 6's writes then run for just those items, in the same conversation.
+
+## On a timer
+
+`/loop 1h vercel-triage` repeats this inside the current conversation while the session
+stays open. Log queries are slow, so hourly or slower. A run with nothing new prints one
+line (`Vercel: nothing new since 14:20.`) and stops.
 - `--prod` / `--staging` : limit to one environment (default: both).
 
 ## Step 1: Resolve the project
@@ -97,6 +113,9 @@ calling an issue new.
 
 ## Step 5: File
 
+Unless the run is `--file`, this step and Step 6's comments and transitions wait for
+the user to pick items from the report.
+
 Write each body as markdown, convert with `scripts/md2adf.py <file>` (stdlib, handles
 paragraphs, `- ` bullets, `## ` headings, links, code), then POST with the fields
 from Step 1. Body shape, short:
@@ -134,7 +153,10 @@ add `group_by` for multi-day windows, and keep each window to about 4 days or it
 
 ## Step 7: Report
 
-A short list: each new ticket as a link with one line, each commented ticket as a
+By default, one numbered line per suggestion: a new bug (proposed title, counts with
+their window, logs link), a recurrence or fold-in comment (the ticket, what would be
+added), or a close (the ticket, the evidence), then the skipped noise in one line. After
+filing, or under `--file`, a short list: each new ticket as a link with one line, each commented ticket as a
 link with its verdict (recurrence or folded in) and what was added, and the skipped noise
 in one line. Numbers with their window
 ("8 in the 24 hours to 02:12 UTC"), never bare.
@@ -144,4 +166,5 @@ in one line. Numbers with their window
 - Read-only on code and infrastructure. No fixes, deploys, or config changes here;
   offer `shipit` for a ticket worth doing now.
 - Never state a suspected cause as fact in a ticket.
-- `--dry` writes nothing, including comments.
+- Never files, comments or transitions in Jira without the user picking the item, unless
+  the run is `--file`. `--dry` writes nothing, including comments and the state file.
