@@ -26,7 +26,7 @@ claudio-skills/                       # repo folder; the plugin inside is named 
 
 - **Marketplace name**: `claudio` (set in `.claude-plugin/marketplace.json`)
 - **GitHub identifier**: `bernardorubin/claudio-skills` (used in `/plugin marketplace add`)
-- **Single plugin**: `claudio` — bundles 30 skills (no commands) and one hooks module carrying two mods. The `pr-review` skill itself supports three modes: PR review, local diff review, and full-repo audit.
+- **Single plugin**: `claudio` — bundles 31 skills (no commands) and one hooks module carrying two mods. The `pr-review` skill itself supports three modes: PR review, local diff review, and full-repo audit.
 - **Install path** (after `/plugin install`): `~/.claude/plugins/cache/claudio/claudio/<version>/`
 
 When users update the marketplace and reinstall, the harness pulls from `main` of this repo via the `git-subdir` source defined in `marketplace.json`.
