@@ -1,14 +1,14 @@
 ---
 name: slack-triage
-description: Check the user's Slack for messages that need them (@-mentions and DMs since the last check), then suggest an action for each one — a drafted reply saved through write-slack-message, a Jira ticket to file (checked against Jira first), or nothing — using the context of the conversation it runs in. Suggests only; files and drafts nothing outside the drafts folder without a yes. Use when the user says "check my slack", "anything on slack for me?", "triage my slack", "do I need to reply to anyone", or runs /slack-triage, including on a timer via "/loop 20m slack-triage". The bare prompt "slack-triage" (what a loop sends) runs it too.
+description: Check the user's Slack for messages that need them (@-mentions, DMs, and replies in threads they're in, since the last check), then suggest an action for each one — a drafted reply saved through write-slack-message, a Jira ticket to file (checked against Jira first), or nothing — using the context of the conversation it runs in. Suggests only; files and drafts nothing outside the drafts folder without a yes. Use when the user says "check my slack", "anything on slack for me?", "triage my slack", "do I need to reply to anyone", or runs /slack-triage, including on a timer via "/loop 20m slack-triage". The bare prompt "slack-triage" (what a loop sends) runs it too.
 ---
 
 # Slack Triage
 
-Mentions in, suggestions out. Each run looks at what reached the user since the last run,
-skips what's already handled, and comes back with a short numbered list: reply here (draft
-saved), ticket this (checked against Jira), or nothing to do. The user picks; nothing is
-filed or sent on its own.
+Mentions in, suggestions out. Each run looks at what reached the user since the last run
+(mentions, DMs, and replies in threads they're part of), skips what's already handled, and
+comes back with a short numbered list: reply here (draft saved), ticket this (checked
+against Jira), or nothing to do. The user picks; nothing is filed or sent on its own.
 
 It runs inside whatever conversation the user is in, and that's the point: when a message
 is about work this conversation has touched (a PR, a ticket, a bug just fixed), use what's
@@ -45,9 +45,19 @@ The Slack MCP's tool descriptions state the logged-in user's id (`U…`). Search
 1. **Mentions**: `keywords: ["<@U…>"]`, no filters. (A `<@U…>` in `filters` matches
    nothing useful and returns the whole workspace.)
 2. **DMs and group DMs**: `filters: "to:<@U…>"`, `channel_types: "im,mpim"`.
+3. **Replies in threads the user is in**: people often answer in a thread without tagging
+   anyone, so searches 1 and 2 miss them. Find the threads with `filters: "from:<@U…>
+   is:thread"`, `after` set to 7 days ago (not the run window: the user's last message in a
+   thread can be days older than the reply). This matches the user's replies and the
+   parents they started that have replies. Each result's permalink carries the thread as
+   `?thread_ts=…&cid=<channel>`; collect the unique `channel:thread_ts` pairs. Read each
+   thread with `slack_read_thread`, `oldest` set to the window start, and keep replies from
+   other people that came after the user's latest message in that thread. A reply that
+   @-mentions the user is already in search 1; keep one copy.
 
 Search from the last run minus 10 minutes (Slack's index lags) and drop anything in the
-state file's `reported` list. Follow `cursor` until results are older than the window.
+state file's `reported` list. Follow `cursor` until results are older than the window
+(for search 3, older than its 7 days).
 
 State lives in `~/.config/claudio/slack-triage-state.json`:
 
