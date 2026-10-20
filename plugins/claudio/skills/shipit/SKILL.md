@@ -153,6 +153,15 @@ Then resolve each remaining question one of two ways before proceeding:
   answer. Include your specific findings (file paths, what the code actually does), not a vague
   "I'll look into it" — informed questions backed by evidence, never speculation.
 
+How to ask, so answering takes the user one line:
+
+- **Recommend an answer for every question**, and word the question so "yes" accepts it.
+  Give the options as lettered sub-bullets, recommended one first.
+- **Ask in rounds.** A round holds only the questions answerable now. A question whose
+  answer depends on another question still open waits for the next round, because the
+  first answer may change it or make it moot. After each round's answers, ask the next
+  round, until none are left.
+
 This is a hard gate: **do not write implementation code until every question is answered.**
 List the open questions, get them resolved, and only then move to Phase 3. If there genuinely
 are no open questions (a trivial, unambiguous fix), say so and proceed — but actually check
