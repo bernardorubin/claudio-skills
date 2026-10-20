@@ -3,7 +3,7 @@ import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit }
 
 import type { Draft, UsageSnap } from '../types'
 import { clipboardScript, labelOf, mentionBlocks, splitDraft } from './slack-html'
-import { captionOf, lookOf, moodOf, petColor, petFrame, petPx, petSvg } from './pet'
+import { captionOf, lookOf, moodOf, petColor, petFrame, petPx, petSvg, signatureOf } from './pet'
 import { MARKET_URL, isNewer, publishedVersion, updateNote } from './update-check'
 import { BAR_PX, GREEN, ROW_PX, bar, svgBar, timeLeft, tokens, tone } from './usage-bars'
 
@@ -260,6 +260,8 @@ const petTick = atom({ plugin: 'claudio', key: 'tick' } as const, 0)
 const runningTool = atom({ plugin: 'claudio', key: 'tool' } as const, null)
 // Tools ended so far, which picks what the pet plays between them.
 const plays = atom({ plugin: 'claudio', key: 'plays' } as const, 0)
+// The claudio skill with a signature (shipit sails) running this turn, shown between its tools.
+const runningSkill = atom({ plugin: 'claudio', key: 'skill' } as const, null)
 
 const block = async ($: EngineInterface, tool: string) => {
   if ((await read($, blockedOn)) !== tool) await update($, blockedOn, () => tool)
@@ -409,7 +411,16 @@ export const register: Register = (on, options) => {
     }).catch(($, e, next) => next(e))
 
     on('turn.complete', async ($, e, next) => {
-      if (e.agentId === undefined) await unblock($)
+      if (e.agentId === undefined) {
+        await unblock($)
+        if ((await read($, runningSkill)) !== null) await update($, runningSkill, () => null)
+      }
+      return next(e)
+    })
+
+    // ponytail: a skill without a signature (or a helper one loads) leaves the running one's in place
+    on('skill.prompt', async ($, e, next) => {
+      if (signatureOf(e.skill) !== null) await update($, runningSkill, () => e.skill)
       return next(e)
     })
   }
@@ -484,9 +495,10 @@ export const register: Register = (on, options) => {
       const ctxPct = Math.round(snapped?.context.percent ?? 0)
       const tool = mood === 'working' ? await read($, runningTool) : null
       const played = mood === 'working' && tool === null ? await read($, plays) : 0
+      const skill = mood === 'working' && tool === null ? await read($, runningSkill) : null
       const newer = mood === 'waiting' ? await read($, outdated) : null
       const note = newer === null ? '' : updateNote(newer)
-      const look = { ...lookOf(ctxPct, snapped?.fiveHour?.percentUsed ?? 0, tool, played), angry: note !== '' }
+      const look = { ...lookOf(ctxPct, snapped?.fiveHour?.percentUsed ?? 0, tool, played, skill === null ? null : signatureOf(skill)), angry: note !== '' }
       const caption = mood === null ? '' : captionOf(mood, ctxPct)
       const captionColor = mood === 'blocked' ? petColor(mood) : caption.includes('/compact') ? tone(ctxPct, 40, 60, 85) : undefined
       // ponytail: the pet gives way when the band is too narrow for both
