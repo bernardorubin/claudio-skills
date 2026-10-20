@@ -231,10 +231,14 @@ it; don't invent rollout cadences, timelines, escalation paths, or process commi
 hasn't stated (he shares PRs widely and has pushed back hard on fabricated process content).
 
 **A change you can see on screen isn't ready until its screenshots are in the PR body.** The local screenshots
-from Phase 3 are your working copy, never a citation. In Chrome, copy them into the session's
-folders, upload them to the PR page's comment box file input (`file_upload`), read the
-`user-attachments` URLs out of the textarea, clear it without posting, and embed the images in
-the description with a BEFORE or AFTER label on each. Each shot must show the changed element in
+from Phase 3 are your working copy, never a citation. Upload them with
+`gh image before.png after.png --repo owner/name`, which puts them in GitHub's
+`user-attachments` storage (where the PR editor puts dragged images) and prints ready-to-paste
+markdown; no browser needed. If `gh image` is missing, install it
+(`gh extension install drogers0/gh-image`) rather than skipping the screenshots. Run it from a
+copy of the files outside the user's home folders, since some setups block any `gh` command
+that names a local path. Embed the images in the description with a BEFORE or AFTER label on
+each. Each shot must show the changed element in
 the state the ticket is about, not a whole page where the change is hard to find. Read the
 description back and confirm every image renders. Skip this when nothing visible changed, even
 in frontend code: backend work, refactors, tracking or GTM changes, type fixes.
