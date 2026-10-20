@@ -4,7 +4,8 @@ export type Mood = 'working' | 'waiting' | 'blocked'
 export type Sport = 'basketball' | 'soccer' | 'weights' | 'jumprope'
 export type Activity = 'think' | 'read' | 'search' | 'write' | 'build' | 'juggle' | 'browse' | 'send' | 'plan' | 'cast' | Sport
 // size grows with the context window's fill; tired when the 5-hour window runs low
-export type Look = { size: 0 | 1 | 2; tired: boolean; activity: Activity }
+// angry: on your turn while a newer claudio is published
+export type Look = { size: 0 | 1 | 2; tired: boolean; activity: Activity; angry?: boolean }
 
 export const moodOf = (blocked: boolean, isWorking: boolean): Mood =>
   blocked ? 'blocked' : isWorking ? 'working' : 'waiting'
@@ -48,7 +49,10 @@ const CAPTION: Record<Mood, string> = { working: 'Working', waiting: 'Your turn'
 export const captionOf = (mood: Mood, ctxPct: number) =>
   mood === 'waiting' && ctxPct >= 60 ? `Context ${ctxPct}% full: try /compact or /clear` : CAPTION[mood]
 
-export const petColor = (mood: Mood) => BODY[mood]
+const ANGRY = '#bf616a'
+// the 💢 anger mark, 5×5, in the free corner above the head's right side
+const VEIN = [[1, 0], [3, 0], [0, 1], [1, 1], [3, 1], [4, 1], [0, 3], [1, 3], [3, 3], [4, 3], [1, 4], [3, 4]]
+export const petColor = (mood: Mood, angry = false) => (angry && mood === 'waiting' ? ANGRY : BODY[mood])
 
 // A grid of 3px pixels, 12 rows: the body fills rows 4–11 and is 10, 12 or 14
 // wide by size; the 4 columns right of it hold a prop, a "!" or a "z", and the
@@ -111,38 +115,45 @@ export const petSvg = (mood: Mood, look: Look) => {
   // tired, everything moves at half speed
   const s = (sec: number) => `${look.tired ? sec * 2 : sec}s steps(1) infinite`
   const act = mood === 'working' ? look.activity : null
+  // shaking, red, frowning under slanted brows, with a flashing anger mark
+  const angry = mood === 'waiting' && look.angry === true
+  const color = petColor(mood, angry)
 
   const css: string[] = []
   const sport = act !== null && SPORTS.includes(act)
   const cycle = act === null ? undefined : CYCLE[act]
   // the body hops while thinking, when it needs you, and over the rope, in step with it
-  if (act === 'think' || act === 'jumprope' || mood === 'blocked')
+  if (angry) css.push(`.b{animation:look ${s(0.4)}}.x{animation:off ${s(0.5)}}`)
+  else if (act === 'think' || act === 'jumprope' || mood === 'blocked')
     css.push(`.b{animation:hop ${s(mood === 'blocked' ? 1 : act === 'jumprope' ? 0.6 : 0.5)}}`)
   if (act === 'think') css.push(`.e{animation:look ${s(2.4)}}`)
-  if (mood === 'waiting' && !look.tired) css.push(`.t{animation:blink ${s(4)}}`)
+  if (mood === 'waiting' && !look.tired && !angry) css.push(`.t{animation:blink ${s(4)}}`)
   if (mood === 'blocked') css.push(`.x{animation:off ${s(0.5)}}`)
   if (cycle !== undefined) css.push(`.f1{animation:off ${s(cycle)}}.f2{animation:on ${s(cycle)}}`)
   if (act === 'search') css.push(`.m{animation:look ${s(1.2)}}`)
   if (act === 'write') css.push(`.p{animation:scribble ${s(0.3)}}`)
   if (act === 'think') css.push(`.d1{animation:d1 ${s(1.6)}}.d2{animation:d2 ${s(1.6)}}.d3{animation:d3 ${s(1.6)}}`)
-  if (mood === 'waiting' && look.tired) css.push(`.z{animation:hop ${s(1)}}`)
+  if (mood === 'waiting' && look.tired && !angry) css.push(`.z{animation:hop ${s(1)}}`)
 
   const body = [px(2, Y, w - 4), px(1, Y + 1, w - 2), px(0, Y + 2, w, 4), px(1, Y + 6, w - 2), px(2, Y + 7), px(w - 3, Y + 7)].join('')
   // a sheen on the top-left and a shadow along the bottom give the blob some volume
   const shading = g(LIGHT, px(2, Y + 1, 2, 1) + px(1, Y + 2), '', 0.5) + g(DARK, px(1, Y + 6, w - 2), '', 0.18)
   // a sweatband for sports; rosy cheeks on your turn
   const band = sport ? g(ROSE, px(1, Y + 1, w - 2)) : ''
-  const cheeks = mood === 'waiting' && !look.tired ? g(ROSE, px(e1 - 1, Y + 4) + px(e2 + 1, Y + 4), '', 0.55) : ''
+  const cheeks = mood === 'waiting' && !look.tired && !angry ? g(ROSE, px(e1 - 1, Y + 4) + px(e2 + 1, Y + 4), '', 0.55) : ''
   // eyes two pixels tall, so a blink, or tired lids, drop only the top half
-  const eyes = (look.tired ? '' : g(DARK, px(e1, Y + 2) + px(e2, Y + 2), 't')) + px(e1, Y + 3) + px(e2, Y + 3)
+  const eyes = angry
+    ? px(e1 - 1, Y + 2) + px(e1, Y + 3) + px(e2 + 1, Y + 2) + px(e2, Y + 3) // slanted, like \ /
+    : (look.tired ? '' : g(DARK, px(e1, Y + 2) + px(e2, Y + 2), 't')) + px(e1, Y + 3) + px(e2, Y + 3)
   // glasses for focused work: two lenses with a bridge, the eyes on their inner edges
   const glasses =
     act === 'read' || act === 'search' || act === 'write' || act === 'browse' || act === 'plan'
       ? g(DARK, px(e1 + 1, Y + 2, 2, 1)) + g(LIGHT, px(e1 - 1, Y + 2, 2, 2) + px(e2, Y + 2, 2, 2))
       : ''
   // a face per mood, so the state reads without the color: a smile on your turn, an open mouth when it needs you
-  const mouth =
-    mood === 'waiting' ? px(e1, Y + 5) + px(e1 + 1, Y + 6, 2) + px(e2, Y + 5) : mood === 'blocked' ? px(e1 + 1, Y + 5, 2, 2) : ''
+  const mouth = angry
+    ? px(e1 + 1, Y + 5, 2) + px(e1, Y + 6) + px(e2, Y + 6)
+    : mood === 'waiting' ? px(e1, Y + 5) + px(e1 + 1, Y + 6, 2) + px(e2, Y + 5) : mood === 'blocked' ? px(e1 + 1, Y + 5, 2, 2) : ''
   const arm =
     act === 'basketball'
       ? px(w, Y + 2)
@@ -204,8 +215,9 @@ export const petSvg = (mood: Mood, look: Look) => {
       g(AMBER, px(0, 9) + px(w - 1, 9) + px(1, 10) + px(w - 2, 10) + px(2, 11, w - 4, 1)),
     ),
   }
-  const prop =
-    act !== null
+  const prop = angry
+    ? g(ANGRY, VEIN.map(([vx, vy]) => px(w - 1 + vx, vy)).join(''), 'x')
+    : act !== null
       ? props[act]
       : mood === 'blocked'
         ? g(BODY.blocked, px(x, Y, 1, 4) + px(x, Y + 5), 'x')
@@ -216,7 +228,7 @@ export const petSvg = (mood: Mood, look: Look) => {
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${w + 4} 12" shape-rendering="crispEdges">` +
     `<style>${css.join('')}${KEYFRAMES}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>` +
-    `<g class="b">${g(BODY[mood], body + arm)}${shading}${band}${cheeks}${glasses}<g class="e" fill="${DARK}">${eyes}</g>${g(DARK, mouth)}</g>` +
+    `<g class="b">${g(color, body + arm)}${shading}${band}${cheeks}${glasses}<g class="e" fill="${DARK}">${eyes}</g>${g(DARK, mouth)}</g>` +
     prop +
     '</svg>'
   )
@@ -233,6 +245,7 @@ export const petFrame = (mood: Mood, look: Look, tick: number) => {
 
   if (mood === 'blocked') return pick([`${face()}!`, `${face()} `])
   if (mood === 'waiting') {
+    if (look.angry) return pick([`(${pad}ò‸ó${pad})💢`, `(${pad}ò‸ó${pad})  `])
     if (look.tired) return pick([`${face()}z`, `${face()}Z`])
     return pick([...Array<string>(7).fill(`${face()} `), `(${pad}-‿-${pad}) `])
   }
