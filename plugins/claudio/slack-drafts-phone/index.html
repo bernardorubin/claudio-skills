@@ -86,7 +86,7 @@
 <script src="slack-html.js"></script>
 <script>
   const list = document.getElementById('list');
-  const { toHtml, toPlain, labelOf, splitDraft } = window.SlackHtml;
+  const { toHtml, labelOf, splitDraft } = window.SlackHtml;
   let drafts = []; // newest version of each draft name, newest first
   let pruned = false;
 
@@ -114,7 +114,7 @@
   const say = (el, ok, text) => { el.textContent = text; el.className = 'status ' + (ok ? 'ok' : 'err'); };
   const why = e => (e && (e.code || e.name || e.message)) || 'unknown error';
 
-  // Both copies take the message alone, never the where-to-post lines above it.
+  // The copy takes the message alone, never the where-to-post lines above it.
   const copyFormatted = async (md, status) => {
     try {
       if (!window.ClipboardItem || !navigator.clipboard?.write) throw new Error('formatted copy is not available here');
@@ -123,15 +123,6 @@
         'text/plain': new Blob([md], { type: 'text/plain' }),
       })]);
       say(status, true, 'Copied. Paste it into Slack.');
-    } catch (e) {
-      say(status, false, 'Could not copy (' + why(e) + '). Try Copy plain.');
-    }
-  };
-
-  const copyPlain = async (md, status) => {
-    try {
-      await navigator.clipboard.writeText(toPlain(md));
-      say(status, true, 'Copied as plain text: links are bare URLs.');
     } catch (e) {
       say(status, false, 'Could not copy (' + why(e) + ').');
     }
@@ -166,8 +157,6 @@
       const actions = document.createElement('div'); actions.className = 'actions';
       const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'primary'; copy.textContent = 'Copy for Slack';
       copy.addEventListener('click', () => copyFormatted(body, status));
-      const plain = document.createElement('button'); plain.type = 'button'; plain.textContent = 'Copy plain';
-      plain.addEventListener('click', () => copyPlain(body, status));
       // A tombstone, not a delete, so the Mac sees it: Sent moves its file to
       // sent/ (so Claude knows it went out), the trash icon moves it to the Trash.
       const done = async sent => {
@@ -182,7 +171,7 @@
       del.setAttribute('aria-label', 'Discard draft'); del.title = 'Discard';
       del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg>';
       del.addEventListener('click', () => done(false));
-      actions.append(copy, plain, sentBtn, del);
+      actions.append(copy, sentBtn, del);
 
       card.append(meta, place, msg, actions, status);
       list.append(card);
