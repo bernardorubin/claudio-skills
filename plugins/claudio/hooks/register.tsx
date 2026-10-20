@@ -4,6 +4,7 @@ import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit }
 import type { Draft, UsageSnap } from '../types'
 import { clipboardScript, labelOf, mentionBlocks, splitDraft } from './slack-html'
 import { captionOf, lookOf, moodOf, petColor, petFrame, petPx, petSvg } from './pet'
+import { MARKET_URL, isNewer, publishedVersion, updateNote } from './update-check'
 import { BAR_PX, GREEN, ROW_PX, bar, svgBar, timeLeft, tokens, tone } from './usage-bars'
 
 // Two mods in one module: the engine loads one hooks module per plugin, allows
@@ -191,6 +192,42 @@ const nudgePet = async ($: EngineInterface) => {
   await $.store.set('petNudged', true)
 }
 
+// ── update check: a newer published claudio than this install ──
+
+// The newer published version, or null; the pet shows it on your turn.
+const outdated = atom({ plugin: 'claudio', key: 'outdated' } as const, null)
+const HOUR_MS = 3_600_000
+
+// One fetch a day across every session (the stamp is in the shared store); the
+// hourly tick only re-reads it, so a session left open for days still hears.
+const checkForUpdate = async ($: EngineInterface, showPet: boolean) => {
+  const now = await $.clock.now()
+  const checkedAt = await $.store.get('updateCheckedAt')
+  if (typeof checkedAt !== 'number' || now - checkedAt >= DAY_MS) {
+    const r = await $.http.fetch(MARKET_URL).catch(() => null)
+    const found = r?.ok ? publishedVersion(r.text) : null
+    if (found !== null) {
+      await $.store.set('latestVersion', found)
+      await $.store.set('updateCheckedAt', now)
+    }
+  }
+  const latest = await $.store.get('latestVersion')
+  const manifest = await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`).catch(() => '{}')
+  const installed = (JSON.parse(manifest) as { version?: unknown }).version
+  const next = isNewer(latest, installed) ? (latest as string) : null
+  if ((await read($, outdated)) !== next) await update($, outdated, () => next)
+  if (!showPet) $.ui.status(next === null ? undefined : updateNote(next))
+  if (next !== null && (await $.store.get('updateToasted')) !== next) {
+    $.ui.toast(updateNote(next), { timeoutMs: 15_000 })
+    await $.store.set('updateToasted', next)
+  }
+}
+
+const startUpdateCheck = async ($: EngineInterface, showPet: boolean) => {
+  await checkForUpdate($, showPet).catch(() => undefined)
+  $.clock.every(HOUR_MS, () => void checkForUpdate($, showPet).catch(() => undefined))
+}
+
 // ── usage-bars: the context and 5-hour limit band above the prompt ──
 
 const snap = atom({ plugin: 'claudio', key: 'snap' } as const, null)
@@ -253,6 +290,7 @@ export const register: Register = (on, options) => {
         (showUsage || showPet) && startUsageBars($),
         showPet && startPet($),
         nudgeVault($),
+        startUpdateCheck($, showPet),
         !showPet && nudgePet($),
       ])
     ).find(r => r.status === 'rejected')
@@ -446,11 +484,13 @@ export const register: Register = (on, options) => {
       const ctxPct = Math.round(snapped?.context.percent ?? 0)
       const tool = mood === 'working' ? await read($, runningTool) : null
       const played = mood === 'working' && tool === null ? await read($, plays) : 0
-      const look = lookOf(ctxPct, snapped?.fiveHour?.percentUsed ?? 0, tool, played)
+      const newer = mood === 'waiting' ? await read($, outdated) : null
+      const note = newer === null ? '' : updateNote(newer)
+      const look = { ...lookOf(ctxPct, snapped?.fiveHour?.percentUsed ?? 0, tool, played), angry: note !== '' }
       const caption = mood === null ? '' : captionOf(mood, ctxPct)
       const captionColor = mood === 'blocked' ? petColor(mood) : caption.includes('/compact') ? tone(ctxPct, 40, 60, 85) : undefined
       // ponytail: the pet gives way when the band is too narrow for both
-      const petFits = mood !== null && (s === null || e.props.bodyColumns >= 70 + caption.length)
+      const petFits = mood !== null && (s === null || e.props.bodyColumns >= 70 + Math.max(caption.length, note.length))
       // read only on the terminal, so the desktop's band never redraws on the tick
       const tick = petFits && Svg === null ? await read($, petTick) : 0
 
@@ -459,13 +499,20 @@ export const register: Register = (on, options) => {
           {s !== null && usage(s)}
           {petFits && (
             <Box key="pet" flexGrow={1} justifyContent="flex-end" alignItems="center" gap={1}>
-              <Text bold={captionColor !== undefined} color={captionColor} dimColor={captionColor === undefined}>
-                {caption}
-              </Text>
+              <Box flexDirection="column" alignItems="flex-end">
+                <Text bold={captionColor !== undefined} color={captionColor} dimColor={captionColor === undefined}>
+                  {caption}
+                </Text>
+                {note !== '' && (
+                  <Text bold color={petColor(mood, true)}>
+                    {note}
+                  </Text>
+                )}
+              </Box>
               {Svg ? (
-                <Svg source={petSvg(mood, look)} alt={`Claude: ${caption}`} {...petPx(look)} isInteractive />
+                <Svg source={petSvg(mood, look)} alt={`Claude: ${caption}${note === '' ? '' : `. ${note}`}`} {...petPx(look)} isInteractive />
               ) : (
-                <Text color={petColor(mood)}>{petFrame(mood, look, tick)}</Text>
+                <Text color={petColor(mood, look.angry)}>{petFrame(mood, look, tick)}</Text>
               )}
             </Box>
           )}
