@@ -221,13 +221,14 @@ body from the diff. Either way keep the body factual — what the change does an
 it; don't invent rollout cadences, timelines, escalation paths, or process commitments the user
 hasn't stated (he shares PRs widely and has pushed back hard on fabricated process content).
 
-**A UI change isn't ready until its screenshots are in the PR body.** The local screenshots
+**A change you can see on screen isn't ready until its screenshots are in the PR body.** The local screenshots
 from Phase 3 are your working copy, never a citation. In Chrome, copy them into the session's
 folders, upload them to the PR page's comment box file input (`file_upload`), read the
 `user-attachments` URLs out of the textarea, clear it without posting, and embed the images in
 the description with a BEFORE or AFTER label on each. Each shot must show the changed element in
 the state the ticket is about, not a whole page where the change is hard to find. Read the
-description back and confirm every image renders. A backend-only PR skips this.
+description back and confirm every image renders. Skip this when nothing visible changed, even
+in frontend code: backend work, refactors, tracking or GTM changes, type fixes.
 
 Before marking it ready, **ask the user whether to run the self-review cycle** — a small or
 trivial PR (a one-line fix, a copy tweak, a config bump) often doesn't need it, so don't force
@@ -301,7 +302,7 @@ release) — hand it back, never run it.
 
 ## What "done" looks like
 
-A review-ready PR with a complete description (screenshots embedded for a UI change), CI checks green (or explicitly reported as
+A review-ready PR with a complete description (screenshots embedded for a visible change), CI checks green (or explicitly reported as
 absent), review addressed, the session logged to the
 worklog and vault, a drafted Slack update ready to paste, and the deploy command handed back
 for the user to run.
