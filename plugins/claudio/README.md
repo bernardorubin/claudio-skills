@@ -390,10 +390,11 @@ A pane for the drafts `/write-slack-message` saves to `~/Desktop/slack-drafts/`,
 
 - `/slack-drafts` opens the pane: one card per draft, newest first, rendered as Markdown with each `@name` in purple (a typed @ pastes as plain text, so those are the ones to re-tag in Slack), with where to post it and who to tag (linked) above the message when the skill found them.
 - Saving a draft opens the pane on its own, and a save or delete in any session shows in every open pane within a few seconds.
-- **Copy for Slack** puts an HTML version on the Mac clipboard (via `osascript`), so `[label](url)` pastes as a link and backticks as code. **Delete** moves the file to the Trash.
+- **Copy for Slack** puts an HTML version on the Mac clipboard (via `osascript`), so `[label](url)` pastes as a link and backticks as code.
+- **Sent** takes the draft off the list and moves it into `sent/` inside the drafts folder, so Claude can tell a message you sent from one you threw away. The **trash icon** discards it (moves the file to the Trash). Sent drafts stay for 7 days, then move to the Trash at the next session start; the **Keep sent Slack drafts** option (`/config`, or `pluginConfigs["claudio@claudio"].options.sentDays`: 3, 7, 14 or 30) changes that.
 - `SLACK_DRAFTS_DIR` overrides the folder.
 
-**On your phone.** Slack on iOS only keeps formatting when the clipboard carries HTML, which the Claude app cannot put there for a mod. So drafts are mirrored to a private claude.ai artifact ([`slack-drafts-phone/index.html`](slack-drafts-phone/index.html)) whose **Copy for Slack** button does that copy in the browser. Each save, delete or `/slack-drafts` appends rows to that artifact's database through the `ArtifactData` tool (approve it once). The page shows the newest row per draft and tidies the rest. **Delete** on the page moves the Mac file to the Trash too, within about 30 seconds while a Claude Code session is open, or at once on `/slack-drafts`.
+**On your phone.** Slack on iOS only keeps formatting when the clipboard carries HTML, which the Claude app cannot put there for a mod. So drafts are mirrored to a private claude.ai artifact ([`slack-drafts-phone/index.html`](slack-drafts-phone/index.html)) whose **Copy for Slack** button does that copy in the browser. Each save, delete or `/slack-drafts` appends rows to that artifact's database through the `ArtifactData` tool (approve it once). The page shows the newest row per draft and tidies the rest. **Sent** and the **trash icon** on the page do the same to the Mac file (into `sent/`, or to the Trash), within about 30 seconds while a Claude Code session is open, or at once on `/slack-drafts`.
 
 Set it up once per account:
 

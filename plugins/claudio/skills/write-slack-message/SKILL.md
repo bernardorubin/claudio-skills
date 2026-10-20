@@ -209,8 +209,7 @@ gets copied whole.
      **Then clear what it supersedes.** If this draft replaces an earlier one to
      the same recipient in the folder (a redraft, or a new message that covers
      everything the old one said), move the old file to `~/.Trash/` after
-     saving, as the pane's Delete does. Keep drafts on another topic and any the
-     user said they already sent. Name each removal in the report line: "Saved
+     saving, as the pane's trash icon does. Keep drafts on another topic. Name each removal in the report line: "Saved
      grace-1008-2353.md, removed grace-1008-2155.md (superseded)".
    - Neither → save to `~/Desktop/slack-message-for-<recipient>.md`, overwriting
      any previous draft for that person. This is the default and needs no setup.
@@ -261,11 +260,25 @@ Empty means no phone page is set up: say the draft is saved and that the phone
 page needs its one-time setup (the plugin README's Mods section). The page only
 receives drafts saved in folder mode.
 
+### Knowing what was sent
+
+The pane and the phone page each have a **Sent** button and a trash icon, so the
+folder records what happened to a draft:
+
+- Still in `<dir>/` → not sent yet.
+- In `<dir>/sent/` → the user sent it (its mtime is when they pressed Sent).
+  Sent drafts are kept for 7 days by default, then moved to the Trash.
+- In neither → discarded, or sent longer ago than that.
+
+When the user or another skill asks whether a message went out, check those
+folders instead of asking. In default mode (`slack-message-for-<recipient>.md`)
+there is no record: ask.
+
 ### Browsing past drafts (optional)
 
 This plugin's `/slack-drafts` pane shows them: it
 lists every draft newest first, with Copy for Slack (an HTML
-clipboard copy, so `[label](url)` pastes as a real link) and delete. On the phone, its pinned Slack Drafts page does the same. Mention it only if
+clipboard copy, so `[label](url)` pastes as a real link), Sent and a trash icon. On the phone, its pinned Slack Drafts page does the same. Mention it only if
 the user asks how to find an older draft; the drafting flow above must work
 unchanged without it.
 

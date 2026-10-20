@@ -126,3 +126,101 @@ test('trashes a draft deleted on the phone page and keeps one saved since', { op
   await clock.advance(30_000)
   expect(moved).toEqual([`${DIR}/${GONE}`])
 })
+
+const ok = { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
+
+test('Sent moves the draft into sent/ and stamps it; the trash icon moves it to the Trash', async ($, on) => {
+  const NAME = 'dmytro-1008-1320.md'
+  const runs: string[][] = []
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: DRAFT.length, mtimeMs: 1, isLink: false }] : [] }))
+  on('fs.read', () => ({ value: DRAFT }))
+  on('process.run', ($, e) => {
+    runs.push([...e.argv])
+    return { value: ok }
+  })
+  on('ui.toast', () => ({ value: undefined }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+  on('ui.render', ($, e) => {
+    const { Box } = $.ui.resolve(e)
+    return <Box key="engine" />
+  })
+
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'claudio', surface, ...PANE })
+    expect(await ui.find({ key: `sent-${NAME}` })).toBeDefined()
+    expect(await ui.find({ key: `del-${NAME}` })).toBeDefined()
+    await ui.unmount()
+  }
+
+  const ui = await $.ui.mount({ plugin: 'claudio', surface: 'desktop', ...PANE })
+  await ui.press({ key: `sent-${NAME}` })
+  await ui.unmount()
+  expect(runs).toContainEqual(['mkdir', '-p', `${DIR}/sent`])
+  expect(runs).toContainEqual(['mv', `${DIR}/${NAME}`, `${DIR}/sent/${NAME}`])
+  expect(runs).toContainEqual(['touch', `${DIR}/sent/${NAME}`])
+
+  runs.length = 0
+  const again = await $.ui.mount({ plugin: 'claudio', surface: 'desktop', ...PANE })
+  await again.press({ key: `del-${NAME}` })
+  await again.unmount()
+  const mv = runs.find(r => r[0] === 'mv')
+  expect(mv?.[1]).toBe(`${DIR}/${NAME}`)
+  expect(String(mv?.[2])).toStartWith('/Users/test/.Trash/')
+})
+
+test('moves a draft marked Sent on the phone page into sent/', { options: { phoneUrl: 'https://claude.ai/artifact/x' } }, async ($, on) => {
+  mock.store(on)
+  const clock = mock.clock(on)
+  const NAME = 'nick-1014-1530.md'
+  const rows = [{ id: 'nick-1014-1530-phone-500', data: { name: NAME, deleted: true, sent: true, from: 'phone', savedAt: 500 }, version: 1 }]
+  const runs: string[][] = []
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: 1, mtimeMs: 100, isLink: false }] : [] }))
+  on('fs.read', () => ({ value: DRAFT }))
+  on('process.run', ($, e) => {
+    runs.push([...e.argv])
+    return { value: ok }
+  })
+  on('ui.toast', () => ({ value: undefined }))
+  on('tool.check', () => ({ decision: 'allow' as const }))
+  on('tool.call', () => ({ result: {}, text: `1 document:\n=== BEGIN ===\n${rows.map(r => JSON.stringify(r)).join('\n')}\n=== END ===` }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  await clock.advance(30_000)
+  expect(runs).toContainEqual(['mv', `${DIR}/${NAME}`, `${DIR}/sent/${NAME}`])
+  expect(runs.some(r => r[0] === 'mv' && String(r[2]).includes('.Trash'))).toBe(false)
+})
+
+test('moves sent drafts older than the option to the Trash at session start', { options: { sentDays: '7' } }, async ($, on) => {
+  const clock = mock.clock(on)
+  const DAY = 86_400_000
+  await clock.advance(30 * DAY)
+  const now = clock.now()
+  const runs: string[][] = []
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', ($, e) => ({
+    value:
+      e.path === `${DIR}/sent`
+        ? [
+            { name: 'old-1001-0900.md', kind: 'file' as const, size: 1, mtimeMs: now - 8 * DAY, isLink: false },
+            { name: 'new-1018-0900.md', kind: 'file' as const, size: 1, mtimeMs: now - 2 * DAY, isLink: false },
+          ]
+        : [],
+  }))
+  on('fs.read', () => ({ value: '' }))
+  on('process.run', ($, e) => {
+    runs.push([...e.argv])
+    return { value: ok }
+  })
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  const moved = runs.filter(r => r[0] === 'mv').map(r => r[1])
+  expect(moved).toEqual([`${DIR}/sent/old-1001-0900.md`])
+})

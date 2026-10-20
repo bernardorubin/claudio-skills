@@ -58,7 +58,8 @@
     border: 1px solid var(--accent); background: transparent; color: var(--accent); }
   button.primary { background: var(--accent); color: var(--accent-ink); flex: 1 1 160px; }
   button.quiet { border-color: var(--rule); color: var(--muted); }
-  button.quiet.armed { border-color: var(--err); color: var(--err); }
+  button.icon { padding: 10px 12px; display: inline-flex; align-items: center; }
+  button.icon svg { width: 18px; height: 18px; }
   button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   .status { min-height: 1.25em; margin: 0; font: 0.8rem/1.4 var(--mono); }
   .status.ok { color: var(--ok); }
@@ -167,20 +168,21 @@
       copy.addEventListener('click', () => copyFormatted(body, status));
       const plain = document.createElement('button'); plain.type = 'button'; plain.textContent = 'Copy plain';
       plain.addEventListener('click', () => copyPlain(body, status));
-      // A tombstone, not a delete, so the Mac sees it and trashes its file too.
-      const del = document.createElement('button'); del.type = 'button'; del.className = 'quiet'; del.textContent = 'Delete';
-      del.addEventListener('click', async () => {
-        if (!del.classList.contains('armed')) {
-          del.classList.add('armed'); del.textContent = 'Tap again to delete';
-          setTimeout(() => { del.classList.remove('armed'); del.textContent = 'Delete'; }, 4000);
-          return;
-        }
+      // A tombstone, not a delete, so the Mac sees it: Sent moves its file to
+      // sent/ (so Claude knows it went out), the trash icon moves it to the Trash.
+      const done = async sent => {
         const now = Date.now();
         const id = d.name.replace(/\.md$/, '').replace(/[^A-Za-z0-9_.~:@+-]/g, '_') + '-phone-' + now;
-        try { await db.collection('drafts').doc(id).set({ name: d.name, deleted: true, from: 'phone', savedAt: now }); }
-        catch (e) { say(status, false, 'Could not delete (' + why(e) + ').'); }
-      });
-      actions.append(copy, plain, del);
+        try { await db.collection('drafts').doc(id).set({ name: d.name, deleted: true, sent, from: 'phone', savedAt: now }); }
+        catch (e) { say(status, false, 'Could not ' + (sent ? 'mark it sent' : 'discard it') + ' (' + why(e) + ').'); }
+      };
+      const sentBtn = document.createElement('button'); sentBtn.type = 'button'; sentBtn.textContent = 'Sent';
+      sentBtn.addEventListener('click', () => done(true));
+      const del = document.createElement('button'); del.type = 'button'; del.className = 'quiet icon';
+      del.setAttribute('aria-label', 'Discard draft'); del.title = 'Discard';
+      del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg>';
+      del.addEventListener('click', () => done(false));
+      actions.append(copy, plain, sentBtn, del);
 
       card.append(meta, place, msg, actions, status);
       list.append(card);

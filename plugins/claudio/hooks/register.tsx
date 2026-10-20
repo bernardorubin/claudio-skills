@@ -54,8 +54,38 @@ const trash = async ($: EngineInterface, d: Draft, url: string) => {
   await syncPhone($, url, await refresh($))
 }
 
-// A delete on the phone page adds a tombstone marked from: 'phone'. The Mac trashes
-// the file, and the tombstone syncPhone then writes tells the page to tidy both away.
+// Sent keeps the draft in sent/ so a skill can tell a sent message from a
+// discarded one; touch stamps the send time the prune reads.
+const sentDirOf = async ($: EngineInterface) => `${await dirOf($)}/sent`
+const moveToSent = async ($: EngineInterface, d: Draft) => {
+  const dir = await sentDirOf($)
+  const made = await $.process.run(['mkdir', '-p', dir])
+  if (made.exitCode !== 0) return made
+  const to = `${dir}/${d.name}`
+  const r = await $.process.run(['mv', d.path, to])
+  if (r.exitCode === 0) await $.process.run(['touch', to])
+  return r
+}
+
+const markSent = async ($: EngineInterface, d: Draft, url: string) => {
+  const r = await moveToSent($, d)
+  $.ui.toast(r.exitCode === 0 ? `Marked the ${labelOf(d.name).who} draft as sent` : `Could not mark it sent: ${r.stderr.trim()}`)
+  await syncPhone($, url, await refresh($))
+}
+
+// ponytail: one pass per session start, to the Trash like a discard; a timer if sessions ever run for weeks
+const DAY_MS = 86_400_000
+const pruneSent = async ($: EngineInterface, days: number) => {
+  if (!(days > 0)) return
+  const dir = await sentDirOf($)
+  const cutoff = (await $.clock.now()) - days * DAY_MS
+  const old = (await $.fs.list(dir).catch(() => [])).filter(f => f.kind === 'file' && f.name.endsWith('.md') && f.mtimeMs < cutoff)
+  await Promise.all(old.map(f => moveToTrash($, { name: f.name, path: `${dir}/${f.name}`, mtimeMs: f.mtimeMs, text: '' })))
+}
+
+// A delete or a Sent on the phone page adds a tombstone marked from: 'phone' (Sent
+// adds sent: true). The Mac trashes the file or moves it to sent/, and the tombstone
+// syncPhone then writes tells the page to tidy both away.
 // `quiet` (the background poll) skips the read when it would open a permission dialog.
 const PULL_MS = 30_000
 const pullPhoneDeletes = async ($: EngineInterface, url: string, quiet: boolean) => {
@@ -69,21 +99,26 @@ const pullPhoneDeletes = async ($: EngineInterface, url: string, quiet: boolean)
   const r = await $.tool.call({ tool: 'ArtifactData', ...input })
   if (r.deny !== undefined || r.isError) return
   // the read comes back as one JSON document per line between two marker lines
-  const deletedAt = new Map<string, number>()
+  const latest = new Map<string, { at: number; sent: boolean }>()
   for (const line of (r.text ?? '').split('\n')) {
     if (!line.startsWith('{')) continue
     try {
-      const { data } = JSON.parse(line) as { data?: { name?: unknown; deleted?: unknown; savedAt?: unknown } }
-      if (data?.deleted === true && typeof data.name === 'string') deletedAt.set(data.name, Math.max(deletedAt.get(data.name) ?? 0, Number(data.savedAt) || 0))
+      const { data } = JSON.parse(line) as { data?: { name?: unknown; deleted?: unknown; sent?: unknown; savedAt?: unknown } }
+      if (data?.deleted !== true || typeof data.name !== 'string') continue
+      const at = Number(data.savedAt) || 0
+      if (at >= (latest.get(data.name)?.at ?? -1)) latest.set(data.name, { at, sent: data.sent === true })
     } catch {
       continue
     }
   }
   // a draft saved again on the Mac after the phone deleted it stays
-  const doomed = (await refresh($)).filter(d => (deletedAt.get(d.name) ?? -1) >= d.mtimeMs)
+  const doomed = (await refresh($)).filter(d => (latest.get(d.name)?.at ?? -1) >= d.mtimeMs)
   if (doomed.length === 0) return
-  const moved = (await Promise.all(doomed.map(d => moveToTrash($, d)))).filter(r => r.exitCode === 0).length
-  if (moved > 0) $.ui.toast(`Moved ${moved} draft${moved === 1 ? '' : 's'} deleted on the phone to the Trash`)
+  const done = await Promise.all(doomed.map(async d => ({ sent: latest.get(d.name)?.sent === true, r: await (latest.get(d.name)?.sent ? moveToSent($, d) : moveToTrash($, d)) })))
+  const sent = done.filter(x => x.sent && x.r.exitCode === 0).length
+  const trashed = done.filter(x => !x.sent && x.r.exitCode === 0).length
+  const parts = [sent > 0 && `${sent} marked sent`, trashed > 0 && `${trashed} moved to the Trash`].filter(Boolean)
+  if (parts.length > 0) $.ui.toast(`From the phone page: ${parts.join(', ')}`)
   await syncPhone($, url, await refresh($))
 }
 
@@ -122,8 +157,9 @@ const syncPhone = async ($: EngineInterface, url: string, list: Draft[]): Promis
 const open = ($: EngineInterface, focus: boolean) =>
   $.ui.open({ id: PANE, title: 'Slack drafts', closeOnEscape: true, ...(focus ? { focus: true as const } : {}) })
 
-const startSlackDrafts = async ($: EngineInterface, url: string) => {
+const startSlackDrafts = async ($: EngineInterface, url: string, sentDays: number) => {
   await $.command.register({ name: 'slack-drafts', description: 'Show your Slack drafts in a pane and send new ones to the phone page' })
+  await pruneSent($, sentDays).catch(() => undefined)
   await refresh($)
   // Each session holds its own list, so a save or delete made in another session
   // shows here on the next tick. ponytail: a 3s poll of one small folder; a file
@@ -206,13 +242,14 @@ export const register: Register = (on, options) => {
   const phoneUrl = String(options.phoneUrl ?? '')
   const showUsage = options.usageBars === true
   const showPet = options.pet === true
+  const sentDays = Number(options.sentDays ?? 7)
 
   on('session.start', async ($, e, next) => {
     const ran = await next(e)
     // one mod failing to start must not keep the others from starting
     const failed = (
       await Promise.allSettled([
-        startSlackDrafts($, phoneUrl),
+        startSlackDrafts($, phoneUrl, sentDays),
         (showUsage || showPet) && startUsageBars($),
         showPet && startPet($),
         nudgeVault($),
@@ -310,7 +347,9 @@ export const register: Register = (on, options) => {
               </Box>
               <Box gap={1} flexWrap="wrap">
                 <Button key={`copy-${d.name}`} label="Copy for Slack" variant="primary" onPress={() => copyForSlack($, d)} />
-                <Button key={`del-${d.name}`} label="Delete" plain dimColor onPress={() => trash($, d, phoneUrl)} />
+                <Button key={`sent-${d.name}`} label="Sent" onPress={() => markSent($, d, phoneUrl)} />
+                {/* ponytail: a one-glyph label is the icon; Button has no icon prop */}
+                <Button key={`del-${d.name}`} label={'\u{1F5D1}'} plain dimColor onPress={() => trash($, d, phoneUrl)} />
               </Box>
             </Box>
           )

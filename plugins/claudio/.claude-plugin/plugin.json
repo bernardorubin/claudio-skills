@@ -1,7 +1,7 @@
 {
   "name": "claudio",
   "description": "Claude Code toolkit: confidence-scored code reviews (PR, local, or full-repo audit), git workflow shortcuts, PR/Slack helpers, Claude meta skills, Jira integration, and per-project knowledge vaults (Karpathy-style LLM Wiki). All skills invocable with no prefix.",
-  "version": "4.15.0",
+  "version": "4.16.0",
   "author": {
     "name": "Bernardo Rubin",
     "url": "https://github.com/bernardorubin"
@@ -28,6 +28,18 @@
       "title": "Pet",
       "description": "Show a small animated pet above the prompt, right of the usage bars: blue while Claude works, green when it's your turn, orange when Claude needs an approval or an answer. Off by default.",
       "default": false
+    },
+    "sentDays": {
+      "type": "string",
+      "title": "Keep sent Slack drafts",
+      "description": "How many days a draft you marked Sent stays in ~/Desktop/slack-drafts/sent/ (so Claude can tell it was sent) before it moves to the Trash.",
+      "options": [
+        "3",
+        "7",
+        "14",
+        "30"
+      ],
+      "default": "7"
     }
   }
 }
