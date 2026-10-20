@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { activityOf, captionOf, lookOf, moodOf, petFrame, petPx, petSvg } from './pet'
+import { activityOf, captionOf, lookOf, moodOf, petFrame, petPx, petSvg, signatureOf } from './pet'
 
 const BAND = (isWorking: boolean) => ({
   component: 'AbovePrompt' as const,
@@ -57,6 +57,82 @@ test('plays a different sport between tools, and wears glasses for focused work'
   expect(petSvg('working', lookOf(10, 10, null, 4))).toContain('.b{animation:hop')
   for (const tool of ['Read', 'WebSearch', 'Edit']) expect(petSvg('working', lookOf(10, 10, tool))).toContain('#eceff4')
   expect(petSvg('working', lookOf(10, 10, 'Bash'))).not.toContain('#bf616a')
+})
+
+const SIGNATURES = ['sail', 'wrap', 'snip', 'launch', 'sleuth', 'mark', 'sort', 'stash'] as const
+
+test('a claudio skill with a signature shows it between tools, and tools keep their props', async () => {
+  expect(['shipit', 'claudio:wrap-session', 'investigate', 'superpowers:brainstorming', 'constructor'].map(signatureOf)).toEqual([
+    'sail',
+    'wrap',
+    'sleuth',
+    null,
+    null,
+  ])
+  expect(lookOf(10, 10, null, 3, 'sail').activity).toBe('sail')
+  expect(lookOf(10, 10, 'Read', 3, 'sail').activity).toBe('read')
+  for (const sig of SIGNATURES) {
+    const look = lookOf(10, 10, null, 0, sig)
+    expect(petSvg('working', look)).toMatch(sig === 'sleuth' ? '.m{animation:sweep' : '.f2{animation:on')
+    expect(petFrame('working', look, 0)).not.toBe(petFrame('working', look, 1))
+  }
+  // the pet bobs in step with its ship
+  expect(petSvg('working', lookOf(10, 10, null, 0, 'sail'))).toContain('.b,.hull{animation:bob')
+})
+
+test('every sprite stays inside its box at every size', async () => {
+  const acts = ['think', 'read', 'search', 'write', 'build', 'juggle', 'browse', 'send', 'plan', 'cast', 'basketball', 'soccer', 'weights', 'jumprope', ...SIGNATURES] as const
+  for (const ctx of [10, 60, 90]) {
+    const base = lookOf(ctx, 10, null)
+    const svgs = [
+      ...acts.map(activity => petSvg('working', { ...base, activity })),
+      petSvg('waiting', base),
+      petSvg('waiting', lookOf(ctx, 80, null)),
+      petSvg('waiting', { ...base, angry: true }),
+      petSvg('blocked', base),
+    ]
+    for (const svg of svgs) {
+      const [, boxW = '0', boxH = '0'] = /viewBox="0 0 (\d+) (\d+)"/.exec(svg) ?? []
+      for (const [, x = '', y = '', w = '', h = ''] of svg.matchAll(/<rect x="(-?\d+)" y="(-?\d+)" width="(\d+)" height="(\d+)"/g)) {
+        expect(Number(x) >= 0 && Number(y) >= 0 && Number(x) + Number(w) <= Number(boxW) && Number(y) + Number(h) <= Number(boxH)).toBe(true)
+      }
+    }
+  }
+})
+
+test('sails through shipit between its tools until the turn ends', { options: { pet: true } }, async ($, on) => {
+  mock.clock(on)
+  on('skill.prompt', ($, e) => ({ text: e.text }))
+  on('turn.complete', () => ({ text: '' }))
+  on('env.get', () => ({ value: '/Users/test' }))
+  on('fs.list', () => ({ value: [] }))
+  on('fs.read', () => ({ value: '{}' }))
+  on('store.get', () => ({ value: true }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('ui.render', ($, e) => {
+    const { Box } = $.ui.resolve(e)
+    return <Box key="engine" />
+  })
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  const sprite = async () => {
+    const band = await $.ui.mount({ plugin: 'claudio', surface: 'desktop', ...BAND(true) })
+    const svg = await band.find({ type: 'Svg' })
+    await band.unmount()
+    return String(svg?.props.source)
+  }
+
+  expect(await sprite()).not.toContain('class="hull"')
+  await $.skill.prompt({ skill: 'claudio:shipit', text: 'Ship it.' })
+  expect(await sprite()).toContain('class="hull"')
+  // a helper skill shipit loads keeps the ship
+  await $.skill.prompt({ skill: 'superpowers:brainstorming', text: 'Ask first.' })
+  expect(await sprite()).toContain('class="hull"')
+  // a subagent's turn ending leaves it; the main turn's ending clears it
+  await $.turn.complete({ answer: '', durationMs: 0, isAborted: false, turnId: 't1', reason: 'answer', agentId: 'a1' })
+  expect(await sprite()).toContain('class="hull"')
+  await $.turn.complete({ answer: '', durationMs: 0, isAborted: false, turnId: 't1', reason: 'answer' })
+  expect(await sprite()).not.toContain('class="hull"')
 })
 
 test('suggests /compact or /clear on your turn once the context fills', async () => {

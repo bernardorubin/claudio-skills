@@ -373,10 +373,11 @@ Off by default, since another plugin's band (a skin, say) may want that spot: tu
 
 #### Pet
 
-A small pixel pet on the band's right edge, showing at a glance whether Claude needs you:
+A small 16-bit pixel pet on the band's right edge, showing at a glance whether Claude needs you:
 
-- **Working** (blue): acts out the running tool, with glasses on for focused work. Read, Grep and Glob read a turning book; web searches and fetches sweep a magnifying glass; Edit and Write scribble with a pencil; plans and todos tick a clipboard; browser tools type on a laptop; subagents juggle three balls; skills wave a wand; Slack, mail and notifications throw a paper plane; Bash and every other tool swing a hammer. Between tools it puts on a sweatband and plays something different each time (basketball, keepy-uppy, weights, jump rope), or hops with thought dots.
-- **Detail**: a sheen and a shadow give the body volume, and it gets rosy cheeks on your turn.
+- **Working** (blue): acts out the running tool, with glasses on for focused work. Read, Grep and Glob read a turning book; web searches and fetches sweep a magnifying glass; Edit and Write scribble with a pencil; plans and todos tick a clipboard; browser tools type on a laptop; subagents juggle three balls; skills wave a wand; Slack, mail and notifications throw a paper plane; Bash and every other tool swing a hammer. Between tools it puts on a sweatband and plays something different each time (basketball, keepy-uppy, weights, jump rope), or hops with thought bubbles.
+- **Skills**: while a claudio skill runs, the gap between its tools shows that skill's own scene instead of play: `/shipit` sails a ship over the waves, `/wrap-session` wraps a gift, `/cut-release` snips a ribbon, `/promote-to-prod` launches a rocket, `/investigate` puts on a deerstalker with a magnifying glass, `/pr-review` and `/review-cycle` underline a page in red pen, the triage skills sort letters into a tray, and `/save-to-vault` and `/save-session-to-worklog` slide a scroll into a safe. It catches the skill however it starts (typed, auto-triggered or preloaded), keeps it through helper skills that have no scene of their own, and drops it when the turn ends, so after a skill stops to ask you something the next turn plays as usual.
+- **Detail**: an outline, a sheen and a shadow give the body volume, its eyes catch the light, and it gets rosy cheeks on your turn.
 - **Your turn** (green): smiles and blinks now and then once the turn is done.
 - **Needs you** (orange): open mouth and a flashing "!" while a permission dialog, a question (AskUserQuestion) or a plan to approve (ExitPlanMode) waits on you.
 - **Update me** (red): on your turn while a newer claudio is published, it shakes and frowns under a flashing 💢, with `claudio X is out: run /update-claudio, or turn on auto-update in /plugin` under "Your turn".
