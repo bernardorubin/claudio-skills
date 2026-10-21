@@ -174,6 +174,11 @@ jira-curl acme POST /rest/api/3/issue -d '{
 }'
 ```
 
+The other fields come from the project's conventions (the repo `CLAUDE.md`, memory, vault), not from habit:
+
+- **Sprint**: only when the conventions say the board runs sprints. A Kanban board has none, and a team that stopped using sprints may leave the last one open, so finding an active sprint is no reason to add a ticket to it.
+- **Priority**: set it whenever the conventions say the board is ordered by it. A ticket left on the default priority sinks below everything that has one.
+
 ### Add / remove labels, change priority
 
 ```bash

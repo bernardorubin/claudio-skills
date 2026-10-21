@@ -39,9 +39,11 @@ line (`Vercel: nothing new since 14:20.`) and stops.
   its app folder. Missing, or several apps: `list_teams` → `list_projects`, and ask only if
   it's still ambiguous. Grab the team **slug** too; logs link as
   `https://vercel.com/<team-slug>/<project-name>/logs`.
-- Jira instance, project key, component, epic conventions and the active sprint: read
-  the repo `CLAUDE.md` and memory, then copy them off the newest bug in the project
-  (`parent`, `components`, `customfield_10020` sprint id). Don't invent defaults.
+- Jira instance, project key, component, epic and priority conventions, and whether the
+  board runs sprints at all: read the repo `CLAUDE.md` and memory, then copy them off the
+  newest bug in the project (`parent`, `components`, `priority`, and the
+  `customfield_10020` sprint id only when the conventions use sprints; see jira-cli's
+  "Create a ticket"). Don't invent defaults.
 - Staging is usually `branch=staging` on the **preview** environment. Confirm the branch
   name in CLAUDE.md.
 
@@ -131,7 +133,7 @@ Add the label `vercel-triage` to every ticket filed, so `labels = vercel-triage`
 
 Title: `[FE]`/`[BE]`/`[FE/BE]` + the symptom in plain words. Never put local paths,
 customer emails, or full user identifiers beyond what the log already masks.
-Verify with a GET that every ticket landed with its parent, component and sprint.
+Verify with a GET that every ticket landed with its parent, component, priority and (when the project uses sprints) sprint.
 
 ## Step 6: Clean up open tickets
 
