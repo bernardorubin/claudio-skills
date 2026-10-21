@@ -175,8 +175,9 @@ Look at each image before attaching it. A crop that misses the pinned element is
 ## Step 6: File
 
 Fields follow the project's conventions: read the repo `CLAUDE.md`, memory and vault for
-the Jira instance, project key, component, sprint and epic, and copy them off the newest
-ticket of the same kind. The right epic is usually the one the Figma frame's feature
+the Jira instance, project key, component, priority, epic and whether the board runs
+sprints, and copy them off the newest ticket of the same kind (a sprint only when the
+conventions use them; see jira-cli's "Create a ticket"). The right epic is usually the one the Figma frame's feature
 belongs to. Never guess an assignee: use the owner the conventions name, otherwise ask
 once for the whole batch.
 
@@ -195,7 +196,7 @@ Write the body as markdown and convert it with `scripts/md2adf.py <file>`:
 
 Title: `[FE]`/`[BE]`/`[Content]` plus the change in plain words. Add the label
 `figma-comment`. No local paths anywhere in the ticket. After filing, GET each ticket and
-check the parent, component, sprint, label and image landed.
+check the parent, component, priority, label and image landed (and the sprint, when the project uses them).
 
 ## Step 7: Report
 

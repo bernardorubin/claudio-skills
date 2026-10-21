@@ -139,6 +139,8 @@ Once approved, create everything using `jira-curl` — **under the jira-cli skil
 
 Use issue type Task by name. Parent each task to the epic with the `parent` field — it works on both company-managed and team-managed Jira Cloud projects (the legacy Epic Link customfield does not).
 
+Add the fields the project's conventions call for: component, priority, and a sprint only when the board runs sprints (jira-cli's "Create a ticket"). When the board is ordered by priority, give each ticket a priority in the plan you present in step 4, so the user approves it with the rest.
+
 ```bash
 ~/.local/bin/jira-curl <project> POST "/rest/api/3/issue" -d '{
   "fields": {
