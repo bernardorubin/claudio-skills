@@ -285,7 +285,7 @@ export const register: Register = (on, options) => {
   const phoneUrl = String(options.phoneUrl ?? '')
   const showUsage = options.usageBars === true
   const showPet = options.pet === true
-  const sentDays = Number(options.sentDays ?? 7)
+  const sentDays = Number(options.sentDays ?? 1)
 
   on('session.start', async ($, e, next) => {
     const ran = await next(e)
