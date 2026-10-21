@@ -267,7 +267,7 @@ folder records what happened to a draft:
 
 - Still in `<dir>/` → not sent yet.
 - In `<dir>/sent/` → the user sent it (its mtime is when they pressed Sent).
-  Sent drafts are kept for 7 days by default, then moved to the Trash.
+  Sent drafts are kept for 1 day by default, then moved to the Trash.
 - In neither → discarded, or sent longer ago than that.
 
 When the user or another skill asks whether a message went out, check those
