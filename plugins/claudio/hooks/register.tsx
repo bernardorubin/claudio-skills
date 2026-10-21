@@ -87,16 +87,19 @@ const pruneSent = async ($: EngineInterface, days: number) => {
 // A delete or a Sent on the phone page adds a tombstone marked from: 'phone' (Sent
 // adds sent: true). The Mac trashes the file or moves it to sent/, and the tombstone
 // syncPhone then writes tells the page to tidy both away.
-// `quiet` (the background poll) skips the read when it would open a permission dialog.
+// `quiet` (the poll) skips the read when it would open a permission dialog. Core
+// asks before every ArtifactData call; the tool.check hook below allows this read
+// only while one of this mod's hooks runs (tool.call, /slack-drafts): a timer's calls skip it.
 const PULL_MS = 30_000
 const pullPhoneDeletes = async ($: EngineInterface, url: string, quiet: boolean) => {
   if (!url) return
   // every session polls; the shared stamp keeps it to about one read per interval in all
   const now = await $.clock.now()
   if (quiet && now - Number((await $.store.get('phonePulledAt')) ?? 0) < PULL_MS - 1_000) return
-  await $.store.set('phonePulledAt', now)
   const input = { action: 'query' as const, url, collection: 'drafts', query: { where: [['from', '==', 'phone']], limit: 1000 } }
+  // stamped after the check, so a refused pass leaves the slot to one that can read
   if (quiet && (await $.tool.check({ tool: 'ArtifactData', input })).decision !== 'allow') return
+  await $.store.set('phonePulledAt', now)
   const r = await $.tool.call({ tool: 'ArtifactData', ...input })
   if (r.deny !== undefined || r.isError) return
   // the read comes back as one JSON document per line between two marker lines
@@ -166,7 +169,8 @@ const startSlackDrafts = async ($: EngineInterface, url: string, sentDays: numbe
   // shows here on the next tick. ponytail: a 3s poll of one small folder; a file
   // watcher if the engine ever grows one
   $.clock.every(3_000, () => void refresh($).catch(() => undefined))
-  // ponytail: a 30s read of the phone page's tombstones; a push if the db ever offers one to a mod
+  // ponytail: a 30s read of the phone page's tombstones (core decides it here, see
+  // pullPhoneDeletes; the tool.call hook reads them too); a push if the db ever offers one to a mod
   $.clock.every(PULL_MS, () => void pullPhoneDeletes($, url, true).catch(() => undefined))
 }
 
@@ -300,6 +304,15 @@ export const register: Register = (on, options) => {
     return ran
   })
 
+  // This mod's own read of its own phone page is allowed; the model's calls,
+  // every write and a settings deny stay as core decides.
+  on('tool.check', { tool: 'ArtifactData' }, async ($, e, next) => {
+    const r = await next(e)
+    const { action, url } = e.input as { action?: unknown; url?: unknown }
+    const ownRead = phoneUrl !== '' && next.origin.plugin === $.plugin.name && url === phoneUrl && action === 'query'
+    return ownRead && r.decision === 'ask' ? { decision: 'allow' as const } : r
+  })
+
   on('command.run', { command: 'slack-drafts' }, async $ => {
     await pullPhoneDeletes($, phoneUrl, false).catch(() => undefined)
     const list = await refresh($)
@@ -313,10 +326,12 @@ export const register: Register = (on, options) => {
   // its call resolves, and any call clears a permission dialog's block on its
   // tool. Slack drafts: a draft written
   // by any tool (Write, Edit, a Bash heredoc) refreshes the list, and a new or
-  // changed one opens the pane.
+  // changed one opens the pane; any call reads the phone page's Sent and trash
+  // taps (at most every 30s), alongside the tool.
   on('tool.call', async ($, e, next) => {
+    const pulling = pullPhoneDeletes($, phoneUrl, true).catch(() => undefined)
     const isDraft = e.tool !== 'ArtifactData' && JSON.stringify(e).includes('slack-drafts')
-    if (!showPet && !isDraft) return next(e)
+    if (!showPet && !isDraft) return next(e).finally(() => pulling)
     if (showPet && (e.tool === 'AskUserQuestion' || e.tool === 'ExitPlanMode')) await block($, e.tool)
     if (showPet) await update($, runningTool, () => e.tool)
     // read before the tool runs, or the poll could see the new draft first and keep the pane shut
@@ -334,6 +349,7 @@ export const register: Register = (on, options) => {
         }
       }
     }
+    await pulling
     if (!isDraft) return ran
     const list = await refresh($)
     if ((list[0]?.mtimeMs ?? 0) > newest) void open($, false)

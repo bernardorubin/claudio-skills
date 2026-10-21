@@ -117,14 +117,19 @@ test('trashes a draft deleted on the phone page and keeps one saved since', { op
     return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('ui.toast', () => ({ value: undefined }))
-  on('tool.check', () => ({ decision: 'allow' as const }))
+  on('tool.check', () => ({ decision: 'ask' as const })) // what core answers for any ArtifactData call
   on('tool.call', () => ({ result: {}, text: `2 documents:\n=== BEGIN ===\n${rows.map(r => JSON.stringify(r)).join('\n')}\n=== END ===` }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('session.start', () => ({ cwd: '/Users/test' }))
 
   await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
   await clock.advance(30_000)
+  // a model's tool call is where the mod's own read is allowed
+  await $.tool.call({ tool: 'Read', file_path: '/Users/test/notes.md' })
   expect(moved).toEqual([`${DIR}/${GONE}`])
+  // only the mod's own read is allowed; anyone else's call to the page still asks
+  const input = { action: 'query', url: 'https://claude.ai/artifact/x', collection: 'drafts' }
+  expect((await $.tool.check({ tool: 'ArtifactData', input })).decision).toBe('ask')
 })
 
 const ok = { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
@@ -185,13 +190,15 @@ test('moves a draft marked Sent on the phone page into sent/', { options: { phon
     return { value: ok }
   })
   on('ui.toast', () => ({ value: undefined }))
-  on('tool.check', () => ({ decision: 'allow' as const }))
+  on('tool.check', () => ({ decision: 'ask' as const })) // what core answers for any ArtifactData call
   on('tool.call', () => ({ result: {}, text: `1 document:\n=== BEGIN ===\n${rows.map(r => JSON.stringify(r)).join('\n')}\n=== END ===` }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('session.start', () => ({ cwd: '/Users/test' }))
 
   await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
   await clock.advance(30_000)
+  // a model's tool call is where the mod's own read is allowed
+  await $.tool.call({ tool: 'Read', file_path: '/Users/test/notes.md' })
   expect(runs).toContainEqual(['mv', `${DIR}/${NAME}`, `${DIR}/sent/${NAME}`])
   expect(runs.some(r => r[0] === 'mv' && String(r[2]).includes('.Trash'))).toBe(false)
 })
