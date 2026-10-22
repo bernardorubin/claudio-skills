@@ -234,8 +234,8 @@ on the project's `url` (up to 50 writes per batch):
 - a new date → `set`, no `if_version`.
 
 If a pinned write fails because the document changed since Step 2, re-read that one and
-redo it. Then `ArtifactData get` `meta/run` and `update` it with `{"lastRun": "<now ISO>"}`
-and its `if_version`. On the very first write, check the page's readers can see the
+redo it. Then `ArtifactData get` `meta/run` and `update` it with `{"lastRun": "<date -Iseconds>"}`
+(the clock's real time, never a rounded or end-of-day one) and its `if_version`. On the very first write, check the page's readers can see the
 records: one `ArtifactData list` of `days` with `as_level: "view"`.
 
 **Local mode.**
@@ -245,7 +245,7 @@ python3 -I "$SKILL_DIR/scripts/weekly_store.py" render "$SKILL_DIR/assets/templa
 ```
 then `open` the page.
 
-Finally set `lastRun` in `~/.config/claudio/weekly-summary.json`.
+Finally set `lastRun` in `~/.config/claudio/weekly-summary.json` to the same time.
 
 ## Step 7: Reply
 
