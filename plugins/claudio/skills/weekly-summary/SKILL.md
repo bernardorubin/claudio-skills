@@ -146,7 +146,8 @@ Always pass `-R <owner>/<repo>` to `gh`. Run independent reads in parallel.
    and merged (same with `merged:FROM..TO`).
 2. **Jira**: `project in (K) AND (created >= FROM OR updated >= FROM)` with
    `expand=changelog` and fields `summary,status,assignee,created,resolutiondate,priority`.
-   Each status change in the changelog dated in the window is an event on that date.
+   Each status change in the changelog dated in the window is an event on that date;
+   keep its author and its from and to statuses for Step 4.
    For the brief, also `project in (K) AND statusCategory != Done AND priority in (Highest, High)`.
 3. **Releases** in the window, by the configured source:
    - `jira`: `GET /rest/api/3/project/K/versions`, `released == true` with
@@ -190,8 +191,14 @@ One document per date in the window, every date, empty days included:
 ```
 
 - **Events**: `opened` (a PR opened or a ticket created that day), `active` (a ticket
-  moved to a status outside Done that day), `done` (a PR merged or a ticket moved to
-  Done that day). At most one event per key and kind per day.
+  moved to a working status that day: anything but backlog, QA or Done), `done` (the
+  team handed work off that day: a PR merged, a ticket moved to the QA handoff status
+  like Ready for QA, or a ticket moved from a working status such as In Progress or In
+  Review to Done). At most one event per key and kind per day.
+- **Done is the team's own work.** The page answers "what did we work on", so a move
+  out of QA to Done (QA signing off) or from the backlog straight to Done (a cleanup)
+  makes no event, and with `people` set a move counts only when its changelog author
+  is one of them. Such a ticket shows only through its other events.
 - **One item per ticket**: a PR whose title or branch names a ticket records under
   the ticket's key and URL; a PR with no ticket is its own item, `key` `<repo>#<n>`,
   linking the PR.
@@ -217,6 +224,7 @@ Two lists, about 3 to 6 bullets each, one or two sentences per bullet.
   not per ticket. Say what now works and any caveat that changes how it's used ("off
   until a store activates a test", "merged, waiting on the next release"). The first
   bullet carries the release or deploy count. No ticket keys, PR numbers or file names.
+  Only the team's own work (Step 4's `done`): QA signing tickets off is not shipping.
 - **In progress / upcoming**: what's actively moving, what's queued behind it, what's
   stalled and on what, hard deadlines, and who owes what. Only from open tickets,
   worklog and vault entries in those 7 days.
