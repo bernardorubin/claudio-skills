@@ -1,20 +1,23 @@
 <title>__TITLE__</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;600&family=IBM+Plex+Mono:wght@500&display=swap">
 <style>
-/* Layout: brief panel, then a 7-day strip, then filterable Releases / Shipped / Open ledgers. Dark-first. */
+/* Layout: brief panel, then the date range and day strip, then filterable Releases / Shipped / Open ledgers. Dark-first. */
 :root {
   --bg: #0e100f; --panel: #151917; --line: #2a302d; --fg: #e6e9e7; --muted: #8f9893;
   --accent: #9cc4a4; --weekend: #34473b; --chip-on-bg: #eef1ef; --chip-on-fg: #0e100f;
+  --warn-bg: #2a2416; --warn-line: #5c4a26;
   --display: "Inter Tight", "Helvetica Neue", Arial, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
   color-scheme: dark;
 }
 @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
   --bg: #f6f7f6; --panel: #eceeec; --line: #d3d8d5; --fg: #161a18; --muted: #5d6661;
-  --accent: #3f7a4f; --weekend: #d6e4da; --chip-on-bg: #161a18; --chip-on-fg: #f6f7f6; color-scheme: light } }
+  --accent: #3f7a4f; --weekend: #d6e4da; --chip-on-bg: #161a18; --chip-on-fg: #f6f7f6;
+  --warn-bg: #f6ecd6; --warn-line: #d8bf8a; color-scheme: light } }
 :root[data-theme="light"] {
   --bg: #f6f7f6; --panel: #eceeec; --line: #d3d8d5; --fg: #161a18; --muted: #5d6661;
-  --accent: #3f7a4f; --weekend: #d6e4da; --chip-on-bg: #161a18; --chip-on-fg: #f6f7f6; color-scheme: light }
+  --accent: #3f7a4f; --weekend: #d6e4da; --chip-on-bg: #161a18; --chip-on-fg: #f6f7f6;
+  --warn-bg: #f6ecd6; --warn-line: #d8bf8a; color-scheme: light }
 body { background: var(--bg); color: var(--fg); font: 16px/1.55 var(--display); }
 main { max-width: 1180px; margin: 0 auto; padding-inline: clamp(16px, 4vw, 48px); padding-block: 40px 80px; display: grid; gap: 56px; }
 .eyebrow { font: 600 12px/1 var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
@@ -23,21 +26,38 @@ h1, h2 { font-weight: 300; letter-spacing: -.02em; line-height: 1.05; margin: 12
 h1 { font-size: clamp(36px, 6vw, 60px); }
 h2 { font-size: clamp(30px, 4.5vw, 46px); padding-bottom: 20px; border-bottom: 2px solid var(--fg); }
 a { color: inherit; text-decoration-color: var(--muted); text-underline-offset: 4px; }
-a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.banner { margin: 0; padding: 14px 18px; border: 1px solid var(--warn-line); background: var(--warn-bg); }
 .brief { background: var(--panel); border: 1px solid var(--line); padding: clamp(20px, 3vw, 36px); display: grid; gap: 20px; }
+.brief-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .brief-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px 56px; }
 .brief-cols > div { min-width: 0; }
 .brief ul { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 10px; }
 .brief li { position: relative; padding-left: 26px; }
 .brief li::before { content: "–"; position: absolute; left: 0; color: var(--muted); }
+.act { font: 600 14px/1 var(--display); background: none; color: var(--fg); border: 1px solid var(--line); padding: 10px 14px; cursor: pointer; }
+.act:hover { border-color: var(--muted); }
+#copy-fallback { width: 100%; box-sizing: border-box; min-height: 140px; font: 14px/1.5 var(--display); background: var(--bg); color: var(--fg); border: 1px solid var(--line); padding: 10px; }
+.range { display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: center; margin-top: 24px; }
+.range .chips { margin-top: 0; }
+.dates { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.dates label { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 14px; }
+input[type="date"], input[type="search"] { font: 15px/1.2 var(--display); color: var(--fg); background: var(--bg); border: 1px solid var(--line); padding: 10px 12px; }
 .days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--line); margin-top: 32px; }
 .day { padding: 16px; min-height: 150px; display: flex; flex-direction: column; gap: 4px; border-left: 1px solid var(--line); min-width: 0; }
-.day:first-child { border-left: 0; }
+.day:nth-child(7n+1) { border-left: 0; }
+.day:nth-child(n+8) { border-top: 1px solid var(--line); }
 .day.weekend { background: var(--weekend); }
 .day .num { font-size: 34px; font-weight: 300; font-variant-numeric: tabular-nums; }
 .day .counts { margin-top: auto; font-size: 14px; color: var(--muted); }
 .day .counts b { color: var(--fg); font-variant-numeric: tabular-nums; }
-@media (max-width: 720px) { .days { grid-template-columns: repeat(4, minmax(0, 1fr)); } .day { border-top: 1px solid var(--line); min-height: 120px; } }
+.days.compact .day { min-height: 100px; padding: 10px 12px; }
+.days.compact .num { font-size: 22px; }
+@media (max-width: 720px) {
+  .days { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .day, .days.compact .day { border-top: 1px solid var(--line); border-left: 1px solid var(--line); min-height: 120px; }
+  .day:nth-child(4n+1) { border-left: 0; }
+}
 .note { color: var(--muted); margin: 14px 0 0; }
 .note b { color: var(--fg); font-weight: 600; }
 .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
@@ -46,6 +66,9 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
 .chip span { color: var(--muted); margin-left: 8px; letter-spacing: 0; font-variant-numeric: tabular-nums; }
 .chip[aria-pressed="true"] { background: var(--chip-on-bg); color: var(--chip-on-fg); border-color: var(--chip-on-bg); }
 .chip[aria-pressed="true"] span { color: inherit; }
+.filters { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin-top: 20px; }
+.filters .chips { margin-top: 0; }
+#q { flex: 1 1 240px; min-width: 0; max-width: 420px; }
 .group { margin-top: 40px; }
 .group-head { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; }
 .table-wrap { overflow-x: auto; margin-top: 16px; }
@@ -57,87 +80,206 @@ td.d, td.k { white-space: nowrap; font-variant-numeric: tabular-nums; }
 td.w { font: 500 12px/1.9 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); white-space: nowrap; }
 td.s { font-size: 13px; color: var(--muted); white-space: nowrap; }
 .empty { color: var(--muted); margin-top: 16px; }
+#ledgers { display: grid; gap: 56px; }
+main > *, #ledgers > * { min-width: 0; } /* wide tables scroll inside .table-wrap instead of widening the page */
 </style>
 
-<main id="app"></main>
+<main>
+  <p class="banner" id="stale" hidden></p>
+  <section class="brief" aria-label="Meeting brief">
+    <div class="brief-head"><div class="eyebrow">Meeting brief</div><button class="act" id="copy-brief" type="button" hidden>Copy brief</button></div>
+    <div id="brief"><p class="empty">Loading the brief.</p></div>
+    <textarea id="copy-fallback" readonly hidden aria-label="Text to copy"></textarea>
+  </section>
+  <section>
+    <div class="eyebrow" id="eyebrow">Weekly summary</div>
+    <h1 id="range-title">&nbsp;</h1>
+    <div class="range" role="group" aria-label="Dates">
+      <div class="chips" id="presets"></div>
+      <div class="dates">
+        <label for="from">From</label><input type="date" id="from">
+        <label for="to">To</label><input type="date" id="to">
+        <button class="act" id="copy-link" type="button" hidden>Copy link to these dates</button>
+      </div>
+    </div>
+    <div class="days" id="days"></div>
+    <p class="note" id="updated"></p>
+    <div class="chips" id="people"></div>
+    <div class="chips" id="sections"></div>
+    <div class="filters"><div class="chips" id="repos"></div><input type="search" id="q" placeholder="Search tickets, PRs and people" aria-label="Search"></div>
+  </section>
+  <div id="ledgers"></div>
+</main>
 
 <script>
+// Records are day documents: {date, counts: [[n, label]], events: [{kind: opened|active|done, key, url, who, title, repo, state}],
+// releases: [{repo, source, version, url, items: [{key, url, who, what}]}], brief?: {shipped, upcoming} (the 7 days ending that date)}.
+// They come from the page's db (days/<date>, plus meta/run) or, for a local copy, from DATA embedded at render time.
 const DATA = /*__DATA__*/null;
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DOW = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
+const $ = id => document.getElementById(id);
 const d = s => new Date(s + "T00:00:00Z");
+const iso = x => x.toISOString().slice(0, 10);
+const add = (s, n) => { const x = d(s); x.setUTCDate(x.getUTCDate() + n); return iso(x); };
+const now = new Date();
+const TODAY = iso(new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())));
+const monday = s => add(s, -((d(s).getUTCDay() + 6) % 7));
+const PRESETS = [
+  ["Last 7 days", () => [add(TODAY, -6), TODAY]],
+  ["This week", () => [monday(TODAY), TODAY]],
+  ["Last week", () => [add(monday(TODAY), -7), add(monday(TODAY), -1)]],
+  ["Last 30 days", () => [add(TODAY, -29), TODAY]],
+];
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const short = s => { const x = d(s); return `${x.getUTCDate()} ${MONTHS[x.getUTCMonth()].slice(0, 3)}`; };
 const long = s => { const x = d(s); return `${x.getUTCDate()} ${MONTHS[x.getUTCMonth()]}`; };
-function range(a, b) {
+function span(a, b) {
   const x = d(a), y = d(b);
+  if (a === b) return `${long(a)} ${y.getUTCFullYear()}`;
+  if (x.getUTCFullYear() !== y.getUTCFullYear()) return `${long(a)} ${x.getUTCFullYear()} – ${long(b)} ${y.getUTCFullYear()}`;
   if (x.getUTCMonth() === y.getUTCMonth()) return `${x.getUTCDate()}–${y.getUTCDate()} ${MONTHS[y.getUTCMonth()]} ${y.getUTCFullYear()}`;
   return `${long(a)} – ${long(b)} ${y.getUTCFullYear()}`;
 }
 const link = (key, url) => url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(key)}</a>` : esc(key);
+const repoParts = r => String(r || "").split(/,\s*/).filter(Boolean);
+const when = t => new Date(t).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 
-let who = "Everyone", section = null;
-try { who = localStorage.getItem("ws-who") || who; section = localStorage.getItem("ws-section"); } catch (e) {}
+let days = DATA ? DATA.days : null, run = DATA ? DATA.run : null, store = DATA ? "ok" : "loading";
+const hashRange = /^#(\d{4}-\d{2}-\d{2})~(\d{4}-\d{2}-\d{2})$/.exec(location.hash);
+let [from, to] = hashRange && hashRange[1] <= hashRange[2] ? [hashRange[1], hashRange[2]] : PRESETS[0][1]();
+let who = "Everyone", section = null, repo = "All", q = "";
+try { who = localStorage.getItem("ws-who") || who; section = localStorage.getItem("ws-section"); repo = localStorage.getItem("ws-repo") || repo; } catch (e) {}
+
+function derive() {
+  const inRange = (days || []).filter(x => x.date >= from && x.date <= to).sort((a, b) => a.date < b.date ? -1 : 1);
+  const byKey = new Map();
+  for (const day of inRange) for (const ev of day.events || []) {
+    const it = byKey.get(ev.key) || { first: day.date };
+    Object.assign(it, ev); // days run oldest first, so the latest snapshot of title, state and who wins
+    if (ev.kind === "done") it.done = day.date;
+    byKey.set(ev.key, it);
+  }
+  const items = [...byKey.values()].map(i => ({ ...i, status: i.done ? "shipped" : "open", date: i.done || i.first }));
+  const releases = inRange.flatMap(day => (day.releases || []).map(r => ({ ...r, date: day.date })));
+  const briefDay = [...inRange].reverse().find(x => x.brief);
+  return { byDate: new Map(inRange.map(x => [x.date, x])), items, releases, briefDay };
+}
+
+const chip = (label, n, on, attr) => `<button class="chip" type="button" ${attr} aria-pressed="${on}">${esc(label)}${n == null ? "" : `<span>${n}</span>`}</button>`;
+const briefText = b => `Shipped\n${b.shipped.map(x => `- ${x}`).join("\n")}\n\nIn progress / upcoming\n${b.upcoming.map(x => `- ${x}`).join("\n")}`;
 
 function render() {
-  const D = DATA, match = w => who === "Everyone" || w === who;
-  const people = {};
-  D.items.forEach(i => { if (i.who) people[i.who] = (people[i.who] || 0) + 1; });
-  if (!people[who]) who = "Everyone"; // a remembered name from an earlier week may not be in this one
-  const releases = D.releases.map(r => ({ ...r, items: r.items.filter(i => match(i.who)) })).filter(r => r.items.length);
-  const shipped = D.items.filter(i => i.status === "shipped" && match(i.who));
-  const open = D.items.filter(i => i.status === "open" && match(i.who));
-  const chip = (label, n, on, attr) => `<button class="chip" ${attr} aria-pressed="${on}">${esc(label)}<span>${n}</span></button>`;
-  const show = s => !section || section === s;
+  const { byDate, items, releases, briefDay } = derive();
+  const hours = run?.lastRun ? (Date.now() - Date.parse(run.lastRun)) / 36e5 : null;
+  $("stale").hidden = !(hours > 26);
+  if (hours > 26) $("stale").textContent = `Last updated ${when(run.lastRun)}. The page updates each morning while the Claude app is open; ask Claude for the weekly summary to update it now.`;
+  $("updated").textContent = run?.lastRun ? `Updated ${when(run.lastRun)}.` : "";
+  $("eyebrow").textContent = run?.project ? `${run.project} weekly summary` : "Weekly summary";
 
-  const releaseGroups = [...new Set(releases.map(r => r.repo))].map(repo => {
-    const rows = releases.filter(r => r.repo === repo).flatMap(r => r.items.map(i => `
+  // Brief
+  const b = briefDay?.brief;
+  $("copy-brief").hidden = !b;
+  if (store !== "ok") $("brief").innerHTML = `<p class="empty">${store === "loading" ? "Loading the brief." : "This page keeps its records in its own storage, which this view can't reach. Open it on claude.ai while signed in."}</p>`;
+  else if (!b) $("brief").innerHTML = `<p class="empty">No brief for these dates. A brief is written each morning for the 7 days before it.</p>`;
+  else {
+    const covers = add(briefDay.date, -6) === from && briefDay.date === to ? "" : `<p class="note" style="margin:0">This brief covers the 7 days ending <b>${long(briefDay.date)}</b>.</p>`;
+    $("brief").innerHTML = `${covers}<div class="brief-cols">
+      <div><div class="eyebrow accent">Shipped</div><ul>${b.shipped.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>
+      <div><div class="eyebrow accent">In progress / upcoming</div><ul>${b.upcoming.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div></div>`;
+  }
+
+  // Dates
+  $("range-title").textContent = span(from, to);
+  $("presets").innerHTML = PRESETS.map(([label, f], i) => { const [a, z] = f(); return chip(label, null, a === from && z === to, `data-preset="${i}"`); }).join("");
+  const first = (days || []).reduce((m, x) => !m || x.date < m ? x.date : m, null);
+  $("from").value = from; $("to").value = to; $("from").max = $("to").max = TODAY;
+  if (first) $("from").min = $("to").min = first;
+  $("copy-link").hidden = !run?.url;
+  const dates = []; for (let x = from; x <= to; x = add(x, 1)) dates.push(x);
+  $("days").className = dates.length > 14 ? "days compact" : "days";
+  $("days").innerHTML = dates.map(date => { const x = d(date), wk = x.getUTCDay() % 6 === 0, c = byDate.get(date)?.counts || []; return `
+    <div class="day${wk ? " weekend" : ""}"><span class="eyebrow">${DOW[x.getUTCDay()]}</span><span class="num">${x.getUTCDate()}</span>
+    <div class="counts">${c.map(([n, l]) => `<div><b>${n}</b> ${esc(l)}</div>`).join("")}</div></div>`; }).join("");
+
+  // Filters: repo and search narrow everything, the person chips count what is left
+  const matchRepo = r => repo === "All" || repoParts(r).includes(repo);
+  const matchQ = (...xs) => !q || xs.join(" ").toLowerCase().includes(q);
+  const repos = [...new Set([...items.map(i => i.repo), ...releases.map(r => r.repo)].flatMap(repoParts))].sort();
+  if (repo !== "All" && !repos.includes(repo)) repo = "All";
+  $("repos").innerHTML = repos.length > 1 ? [chip("All repos", null, repo === "All", 'data-repo="All"'), ...repos.map(r => chip(r, null, repo === r, `data-repo="${esc(r)}"`))].join("") : "";
+  const scoped = items.filter(i => matchRepo(i.repo) && matchQ(i.key, i.title, i.who, i.repo, i.state));
+  const people = {};
+  scoped.forEach(i => { if (i.who) people[i.who] = (people[i.who] || 0) + 1; });
+  if (who !== "Everyone" && !people[who]) who = "Everyone";
+  const matchWho = w => who === "Everyone" || w === who;
+  const shipped = scoped.filter(i => i.status === "shipped" && matchWho(i.who));
+  const open = scoped.filter(i => i.status === "open" && matchWho(i.who));
+  const cut = releases.filter(r => matchRepo(r.repo))
+    .map(r => ({ ...r, items: (r.items || []).filter(i => matchWho(i.who) && matchQ(r.version, i.key, i.what, i.who, r.repo)) }))
+    .filter(r => r.items.length);
+  $("people").innerHTML = chip("Everyone", scoped.length, who === "Everyone", 'data-who="Everyone"') +
+    Object.entries(people).sort((a, z) => z[1] - a[1]).map(([p, n]) => chip(p, n, who === p, `data-who="${esc(p)}"`)).join("");
+  $("sections").innerHTML = chip("Releases", cut.length, section === "releases", 'data-section="releases"') +
+    chip("Shipped", shipped.length, section === "shipped", 'data-section="shipped"') + chip("Open", open.length, section === "open", 'data-section="open"');
+
+  // Ledgers
+  if (store !== "ok" || !days?.length) {
+    $("ledgers").innerHTML = store === "ok" ? `<p class="empty">Nothing recorded yet. Ask Claude for the weekly summary in this project to fill the page.</p>` : "";
+    return;
+  }
+  const show = s => !section || section === s;
+  const releaseGroups = [...new Set(cut.map(r => r.repo))].map(rp => {
+    const rows = cut.filter(r => r.repo === rp).flatMap(r => r.items.map(i => `
       <tr><td class="v">${r.url ? link(r.version, r.url) : esc(r.version)}</td><td class="d">${short(r.date)}</td>
       <td class="k">${link(i.key, i.url)}</td><td class="w">${esc(i.who || "–")}</td><td>${esc(i.what)}</td></tr>`)).join("");
-    const src = releases.find(r => r.repo === repo).source;
-    return `<div class="group"><div class="group-head"><span class="eyebrow accent">${esc(repo)}</span><span class="note" style="margin:0">tracked in ${esc(src)}</span></div>
+    return `<div class="group"><div class="group-head"><span class="eyebrow accent">${esc(rp)}</span><span class="note" style="margin:0">tracked in ${esc(cut.find(r => r.repo === rp).source)}</span></div>
       <div class="table-wrap"><table><thead><tr><th>Version</th><th>Date</th><th>Ticket</th><th>Who</th><th>What shipped</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
   }).join("");
-
   const ledger = rows => rows.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Item</th><th>Who</th><th>What</th><th>Status</th></tr></thead><tbody>${
-    rows.sort((a, b) => a.date < b.date ? -1 : 1).map(i => `<tr><td class="d">${short(i.date)}</td><td class="k">${link(i.key, i.url)}</td>
+    rows.sort((a, z) => a.date < z.date ? -1 : 1).map(i => `<tr><td class="d">${short(i.date)}</td><td class="k">${link(i.key, i.url)}</td>
       <td class="w">${esc(i.who || "–")}</td><td>${esc(i.title)}${i.repo ? ` <span class="s">· ${esc(i.repo)}</span>` : ""}</td><td class="s">${esc(i.state || "")}</td></tr>`).join("")
-  }</tbody></table></div>` : `<p class="empty">Nothing here for this filter.</p>`;
-
-  const cutCount = releases.length;
-  document.getElementById("app").innerHTML = `
-    <section class="brief" aria-label="Meeting brief">
-      <div class="eyebrow">Meeting brief</div>
-      <div class="brief-cols">
-        <div><div class="eyebrow accent">Shipped</div><ul>${D.brief.shipped.map(b => `<li>${esc(b)}</li>`).join("")}</ul></div>
-        <div><div class="eyebrow accent">In progress / upcoming</div><ul>${D.brief.upcoming.map(b => `<li>${esc(b)}</li>`).join("")}</ul></div>
-      </div>
-    </section>
-    <section>
-      <div class="eyebrow">Weekly summary</div>
-      <h1>${range(D.start, D.end)}</h1>
-      <div class="days">${D.days.map(day => { const x = d(day.date), wk = x.getUTCDay() % 6 === 0; return `
-        <div class="day${wk ? " weekend" : ""}"><span class="eyebrow">${DOW[x.getUTCDay()]}</span><span class="num">${x.getUTCDate()}</span>
-        <div class="counts">${day.counts.map(([n, l]) => `<div><b>${n}</b> ${esc(l)}</div>`).join("")}</div></div>`; }).join("")}</div>
-      <p class="note">${D.days.length} days.${D.previousEnd ? ` The previous summary closed <b>${long(D.previousEnd)}</b>.` : ""}</p>
-      <div class="chips">${chip("Everyone", D.items.length, who === "Everyone", 'data-who="Everyone"')}${
-        Object.entries(people).sort((a, b) => b[1] - a[1]).map(([p, n]) => chip(p, n, who === p, `data-who="${esc(p)}"`)).join("")}</div>
-      <div class="chips">${chip("Releases", cutCount, section === "releases", 'data-section="releases"')}${
-        chip("Shipped", shipped.length, section === "shipped", 'data-section="shipped"')}${chip("Open", open.length, section === "open", 'data-section="open"')}</div>
-      <p class="note">${shipped.length + open.length} items. Select a name to filter.</p>
-    </section>
-    ${show("releases") ? `<section><div class="eyebrow">Releases</div><h2>${cutCount} cut this period</h2>${releaseGroups}</section>` : ""}
+  }</tbody></table></div>` : `<p class="empty">Nothing here for these dates and filters.</p>`;
+  $("ledgers").innerHTML = `
+    ${show("releases") ? `<section><div class="eyebrow">Releases</div><h2>${cut.length} cut in these dates</h2>${releaseGroups || `<p class="empty">No releases for these dates and filters.</p>`}</section>` : ""}
     ${show("shipped") ? `<section><div class="eyebrow">Shipped</div><h2>${shipped.length} merged or done</h2>${ledger(shipped)}</section>` : ""}
     ${show("open") ? `<section><div class="eyebrow">Open</div><h2>${open.length} still moving</h2>${ledger(open)}</section>` : ""}`;
 }
 
-document.addEventListener("click", e => {
-  const b = e.target.closest(".chip"); if (!b) return;
-  if (b.dataset.who) who = b.dataset.who;
-  if (b.dataset.section) section = section === b.dataset.section ? null : b.dataset.section;
-  try { localStorage.setItem("ws-who", who); section ? localStorage.setItem("ws-section", section) : localStorage.removeItem("ws-section"); } catch (e) {}
+function setRange(a, z) {
+  [from, to] = a <= z ? [a, z] : [z, a];
+  try { history.replaceState(null, "", `#${from}~${to}`); } catch (e) {}
   render();
+}
+function remember() {
+  try { localStorage.setItem("ws-who", who); localStorage.setItem("ws-repo", repo); section ? localStorage.setItem("ws-section", section) : localStorage.removeItem("ws-section"); } catch (e) {}
+}
+async function copy(text, btn, label) {
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) { const t = $("copy-fallback"); t.value = text; t.hidden = false; t.focus(); t.select(); return; }
+  const was = btn.textContent; btn.textContent = label; setTimeout(() => { btn.textContent = was; }, 1600);
+}
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.id === "copy-brief") { const x = derive().briefDay; if (x) copy(briefText(x.brief), b, "Brief copied"); return; }
+  if (b.id === "copy-link") { copy(`${run.url}#${from}~${to}`, b, "Link copied"); return; }
+  if (b.dataset.preset) { const [a, z] = PRESETS[+b.dataset.preset][1](); setRange(a, z); return; }
+  if (b.dataset.who) who = b.dataset.who;
+  if (b.dataset.repo) repo = b.dataset.repo;
+  if (b.dataset.section) section = section === b.dataset.section ? null : b.dataset.section;
+  remember(); render();
 });
+["from", "to"].forEach(id => $(id).addEventListener("change", () => { if ($("from").value && $("to").value) setRange($("from").value, $("to").value); }));
+$("q").addEventListener("input", () => { q = $("q").value.trim().toLowerCase(); render(); });
+
 render();
+if (!DATA) (async () => {
+  const db = window.claude?.use ? await window.claude.use("db") : null;
+  if (!db) { store = "unavailable"; render(); return; }
+  const failed = () => { store = "unavailable"; render(); };
+  db.collection("days").onSnapshot(s => { days = s.docs.map(x => x.data()); store = "ok"; render(); }, failed);
+  db.doc("meta/run").onSnapshot(s => { run = s.exists ? s.data() : null; render(); }, () => {});
+})();
 </script>
