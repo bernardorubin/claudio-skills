@@ -45,6 +45,13 @@ const copyForSlack = async ($: EngineInterface, d: Draft) => {
   $.ui.toast('Copied as plain text (the Slack-safe copy failed)')
 }
 
+// Selects the file in Finder, ready to drag into the Slack message.
+const revealAttachment = async ($: EngineInterface, path: string) => {
+  const full = path.replace(/^~(?=\/)/, await home($))
+  const r = await $.process.run(['open', '-R', full])
+  $.ui.toast(r.exitCode === 0 ? `Showing ${full.split('/').pop()} in Finder: drag it into Slack` : `Could not find ${full}`)
+}
+
 // ponytail: moved to ~/.Trash, not unlinked, so a misclick is recoverable from Finder
 const moveToTrash = async ($: EngineInterface, d: Draft) =>
   $.process.run(['mv', d.path, `${await home($)}/.Trash/${d.name.replace(/\.md$/, '')} ${Date.now()}.md`])
@@ -371,7 +378,7 @@ export const register: Register = (on, options) => {
       <Box flexDirection="column" gap={1}>
         {list.map((d, i) => {
           const { who, when } = labelOf(d.name)
-          const { body, where } = splitDraft(d.text)
+          const { body, where, attachments } = splitDraft(d.text)
           return (
             <Box key={`draft-${i}`} flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap={1}>
               <Box gap={2}>
@@ -379,6 +386,13 @@ export const register: Register = (on, options) => {
                 {when !== '' && <Text dimColor wrap="truncate-end">{when}</Text>}
               </Box>
               {where !== '' && <Markdown key={`where-${d.name}`} text={where} dimColor />}
+              {attachments.length > 0 && (
+                <Box gap={1} flexWrap="wrap">
+                  {attachments.map(p => (
+                    <Button key={`attach-${d.name}-${p}`} label={`\u{1F4CE} ${p.split('/').pop()}`} onPress={() => revealAttachment($, p)} />
+                  ))}
+                </Box>
+              )}
               <Box flexDirection="column" gap={1}>
                 {mentionBlocks(body).map(b =>
                   'md' in b ? (

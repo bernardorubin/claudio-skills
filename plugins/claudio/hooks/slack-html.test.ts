@@ -59,6 +59,12 @@ test('splits @mention lines into colored runs for the pane', async () => {
 
 test('splits where to post from the message', async () => {
   const md = '---\npost_in: [#eng thread](https://x.test/p1)\ntag: [Nick](https://x.test/team/U1)\n---\n\n@Nick fixed'
-  expect(splitDraft(md)).toEqual({ body: '@Nick fixed', where: 'Post in [#eng thread](https://x.test/p1)\n\nTag [Nick](https://x.test/team/U1)' })
-  expect(splitDraft('no header')).toEqual({ body: 'no header', where: '' })
+  expect(splitDraft(md)).toEqual({ body: '@Nick fixed', where: 'Post in [#eng thread](https://x.test/p1)\n\nTag [Nick](https://x.test/team/U1)', attachments: [] })
+  expect(splitDraft('no header')).toEqual({ body: 'no header', where: '', attachments: [] })
+  const attached = '---\npost_in: [#eng](https://x.test/p1)\nattach: ~/Desktop/a.png, /tmp/b c.jpg\nattach: ~/Desktop/d.pdf\n---\nsee screenshots'
+  expect(splitDraft(attached)).toEqual({
+    body: 'see screenshots',
+    where: 'Post in [#eng](https://x.test/p1)',
+    attachments: ['~/Desktop/a.png', '/tmp/b c.jpg', '~/Desktop/d.pdf'],
+  })
 })

@@ -199,6 +199,13 @@ Both keys are optional; leave `tag` out when nobody is tagged. Both copies leave
 header out. In default mode (`slack-message-for-<recipient>.md`) skip it: that file
 gets copied whole.
 
+**Attachments.** When the message says something is attached (a screenshot, a
+recording, a PDF), add `attach:` to the same header with each local file's full
+path, comma-separated: `attach: ~/Desktop/HPY-1-screenshots/1-fixed.png`. The pane
+shows a button per file that selects it in Finder, ready to drag into Slack. The path
+stays in the header, never in the message: the copies leave the header out. The report
+line names each file and what it shows.
+
 ## Output
 
 1. **Where to save — the folder decides.** Check once with `test -d`, then:
@@ -229,7 +236,7 @@ gets copied whole.
    who has to act. `everyone` only when there's no Slack MCP to find the channel.
    No dates, no ticket keys, no full sentences in the filename.
 3. The file contains ONLY the Slack message, no preamble or instructions (plus the
-   `post_in` / `tag` header above, in folder mode with the Slack MCP).
+   `post_in` / `tag` / `attach` header above, in folder mode).
 4. **The file IS the delivery. Never paste the draft into the chat reply.** Say
    it's saved, give the path, stop. Pasting it inline makes the user read the
    same message twice. With the Slack MCP, the report line also says where to

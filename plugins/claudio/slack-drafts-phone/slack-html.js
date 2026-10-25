@@ -141,12 +141,16 @@ var SlackHtml = (() => {
   var HEADER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
   var splitDraft = (md) => {
     const m = HEADER.exec(md);
-    if (!m) return { body: md, where: "" };
-    const where = (m[1] ?? "").split(/\r?\n/).flatMap((line) => {
-      const kv = /^(post_in|tag):\s*(.+)$/.exec(line.trim());
+    if (!m) return { body: md, where: "", attachments: [] };
+    const lines = (m[1] ?? "").split(/\r?\n/).map((line) => line.trim());
+    const where = lines.flatMap((line) => {
+      const kv = /^(post_in|tag):\s*(.+)$/.exec(line);
       return kv ? [`${kv[1] === "tag" ? "Tag" : "Post in"} ${kv[2]}`] : [];
     }).join("\n\n");
-    return { body: md.slice(m[0].length).replace(/^\s*\n/, ""), where };
+    const attachments = lines.flatMap(
+      (line) => (/^attach:\s*(.+)$/.exec(line)?.[1] ?? "").split(",").map((p) => p.trim()).filter(Boolean)
+    );
+    return { body: md.slice(m[0].length).replace(/^\s*\n/, ""), where, attachments };
   };
   var hex = (s) => [...new TextEncoder().encode(s)].map((b) => b.toString(16).padStart(2, "0")).join("");
   var literal = (s) => '"' + s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, '" & linefeed & "') + '"';
