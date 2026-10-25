@@ -1,7 +1,7 @@
 {
   "name": "claudio",
   "description": "Claude Code toolkit: confidence-scored code reviews (PR, local, or full-repo audit), git workflow shortcuts, PR/Slack helpers, Claude meta skills, Jira integration, and per-project knowledge vaults (Karpathy-style LLM Wiki). All skills invocable with no prefix.",
-  "version": "4.21.1",
+  "version": "4.22.0",
   "author": {
     "name": "Bernardo Rubin",
     "url": "https://github.com/bernardorubin"
