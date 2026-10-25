@@ -149,25 +149,30 @@ export const toPlain = (md: string) => {
   return out.join('\n').trim() + '\n'
 }
 
-// write-slack-message may open a draft with where to post it and who to tag:
+// write-slack-message may open a draft with where to post it, who to tag and what to attach:
 //   ---
 //   post_in: [#hpy-api thread on PR 2886](https://x.slack.com/archives/C1/p1760467200123456)
 //   tag: [Nick Conn](https://x.slack.com/team/U081C53KT0T)
+//   attach: ~/Desktop/HPY-1-screenshots/1-fixed.png, ~/Desktop/HPY-1-screenshots/2-after.png
 //   ---
-// `where` is those lines as Markdown for the pane and the phone page; `body` is the
-// message alone, the only part a copy takes.
+// `where` is the post_in and tag lines as Markdown for the pane and the phone page;
+// `attachments` are the files to attach in Slack (comma-separated, or one attach line
+// each); `body` is the message alone, the only part a copy takes.
 const HEADER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/
 export const splitDraft = (md: string) => {
   const m = HEADER.exec(md)
-  if (!m) return { body: md, where: '' }
-  const where = (m[1] ?? '')
-    .split(/\r?\n/)
+  if (!m) return { body: md, where: '', attachments: [] as string[] }
+  const lines = (m[1] ?? '').split(/\r?\n/).map(line => line.trim())
+  const where = lines
     .flatMap(line => {
-      const kv = /^(post_in|tag):\s*(.+)$/.exec(line.trim())
+      const kv = /^(post_in|tag):\s*(.+)$/.exec(line)
       return kv ? [`${kv[1] === 'tag' ? 'Tag' : 'Post in'} ${kv[2]}`] : []
     })
     .join('\n\n')
-  return { body: md.slice(m[0].length).replace(/^\s*\n/, ''), where }
+  const attachments = lines.flatMap(line =>
+    (/^attach:\s*(.+)$/.exec(line)?.[1] ?? '').split(',').map(p => p.trim()).filter(Boolean),
+  )
+  return { body: md.slice(m[0].length).replace(/^\s*\n/, ''), where, attachments }
 }
 
 const hex = (s: string) => [...new TextEncoder().encode(s)].map(b => b.toString(16).padStart(2, '0')).join('')
