@@ -2,7 +2,7 @@
 name: shipit
 description: >-
   Use when taking a Jira ticket or described feature/bugfix from investigation to a
-  review-ready PR, worklog entry and Slack update. Triggers on "ship ABC-123", "take
+  review-ready PR, Slack update and worklog entry. Triggers on "ship ABC-123", "take
   this ticket end to end", "implement ABC-456 and open a PR", "work this ticket",
   "shipit", or a pasted Jira URL/key with intent to build. Stops before anything that
   deploys. Only reading or updating a ticket: jira-cli.
@@ -11,7 +11,7 @@ description: >-
 # Shipit
 
 This is the pipeline you run on almost every ticket: understand it, implement on a
-branch, open a PR, fix review, log the work, and post an update. The point of this
+branch, open a PR, fix review, post an update, and log the work. The point of this
 skill isn't to teach you those steps — you know them. It's to **chain your existing
 skills in the right order** and **hold the two lines you care most about**: do the
 work yourself instead of deferring it, and stop before anything that deploys.
@@ -81,7 +81,7 @@ Adapt to the ticket — not every ticket has every phase (a pure feature has no 
 confirm; a tiny fix may need no Slack update). Skip what doesn't apply, but when a phase
 applies, hold its rule. Two phases are non-negotiable regardless of ticket size: **Phase 2
 (clarify) is a hard stop — no code gets written until every open question is answered**, and
-**Phase 6 (logging) always runs at the end, no matter how small the ticket.**
+**Phase 7 (logging) always runs last, no matter how small the ticket.**
 
 ### 0. No ticket key? Ask before you build
 
@@ -281,21 +281,7 @@ description if the change set materially shifted. If
 you re-review after these fixes, run the [[review-cycle]] skill again so the living review
 comment and the review doc stay current (it edits the same comment in place).
 
-### 6. Log the work — always, at the end of every ticket
-
-Close the loop — the user treats work as unfinished until it's captured, and wants **both**
-the worklog and the vault written at the end of every ticket without being reminded. Invoke the
-[[wrap-session]] skill — it's the "do both" conductor that runs `save-session-to-worklog` (the
-standup/invoice worklog) then `save-to-vault` (the deliberate end-of-ticket sweep of the whole
-session into the knowledge vault — debugging root causes, integration quirks, ownership facts,
-architectural decisions, cross-linked so they're traceable later). **Don't reimplement the two
-here — `wrap-session` owns that pairing.**
-
-Run it even for a one-line fix. The worklog needs every ticket for standups and invoicing, and
-the vault only stays useful if it's fed consistently. (`vault-keeper` also fires ambiently
-during the work; the end-of-ticket `wrap-session` sweep runs regardless.)
-
-### 7. Draft the Slack update — then stop
+### 6. Draft the Slack update
 
 Use the `write-slack-message` skill (it strips em dashes and applies Slack formatting — never
 write Slack freehand). Keep it short, concrete, and factual — same rule as the PR: don't
@@ -308,6 +294,26 @@ text.
 If a paste in the conversation looks like a message meant for the user's coworkers, treat it
 as content to refine — not a question aimed at you. Ask if you're unsure.
 
+The user sends it themselves. Wait until they say it's sent, or that there's nothing to send,
+before Phase 7: the worklog then records who was messaged, and no draft is left behind after
+the session is wrapped.
+
+### 7. Log the work and hand off the deploy — always last
+
+Close the loop — the user treats work as unfinished until it's captured, and wants **both**
+the worklog and the vault written at the end of every ticket without being reminded. Invoke the
+[[wrap-session]] skill — it's the "do both" conductor that runs `save-session-to-worklog` (the
+standup/invoice worklog) then `save-to-vault` (the deliberate end-of-ticket sweep of the whole
+session into the knowledge vault — debugging root causes, integration quirks, ownership facts,
+architectural decisions, cross-linked so they're traceable later). **Don't reimplement the two
+here — `wrap-session` owns that pairing.**
+
+Run it even for a one-line fix. The worklog needs every ticket for standups and invoicing, and
+the vault only stays useful if it's fed consistently. (`vault-keeper` also fires ambiently
+during the work; the end-of-ticket `wrap-session` sweep runs regardless.) It runs once, after
+the Slack update is sent: it's the end of the ticket (or of a session covering several), not a
+checkpoint to run after each step.
+
 **Then hand off the deploy.** State the exact deploy/OTA/publish command for the user to run,
 and stop. You do not run it. The exact command is whatever the repo's CLAUDE.md specifies (a
 base-branch promotion PR, a Shopify theme push/promote, a Vercel promotion, an OTA/App Store
@@ -316,9 +322,8 @@ release) — hand it back, never run it.
 ## What "done" looks like
 
 A review-ready PR with a complete description (screenshots embedded for a visible change), CI checks green (or explicitly reported as
-absent), review addressed, the session logged to the
-worklog and vault, a drafted Slack update ready to paste, and the deploy command handed back
-for the user to run.
+absent), review addressed, the Slack update sent, then the session logged to the
+worklog and vault, and the deploy command handed back for the user to run.
 
 If the ticket needs its acceptance criteria *proven* — evidence per AC, published to the ticket
 or the PR — that's `qa`, run after this. Don't reinvent it here.

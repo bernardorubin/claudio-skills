@@ -29,7 +29,7 @@ Everything is a **skill** — no `claudio:` prefix needed when invoking. Skills 
 | Skill | Triggers on |
 |-------|-------------|
 | `/create-app` | "let's build an app", "new app idea", "take this app to the App Store" — zero-to-**first**-release: spec → build → production auth → store readiness → submittable build, stops before submitting |
-| `/shipit` | "ship ABC-123", "take this ticket end to end", "implement ABC-456 and open a PR" — full pipeline: understand → implement → PR → CI green → log → Slack, stops before deploy |
+| `/shipit` | "ship ABC-123", "take this ticket end to end", "implement ABC-456 and open a PR" — full pipeline: understand → implement → PR → CI green → Slack → log, stops before deploy |
 | `/cut-release` | "cut a release", "ship a build", "prep the release", "new App Store build" — per-release: pre-flight the gates (version train / build slot / CI), bump, build, release notes, hand back the submit command |
 | `/promote-to-prod` | "promote to prod", "push it to prod", "staging then prod" — the full ladder: PR into staging → green → merge → verify on staging → PR into main → green → merge → confirm prod is healthy *and* the fix is live, with evidence saved locally, then the Jira ticket (if any) moved to Done or Ready for QA |
 | `/investigate` | "investigate X", "look into why Y", "figure out what's going on with Z", pasting an incident/alert — evidence-grounded diagnosis, read-only |
