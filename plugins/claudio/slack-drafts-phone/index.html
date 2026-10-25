@@ -44,6 +44,7 @@
   .where { color: var(--muted); font-size: 0.875rem; display: grid; gap: 2px; overflow-wrap: anywhere; min-width: 0; }
   .where p { margin: 0; }
   .where a { color: var(--accent); }
+  .files { margin: 0; color: var(--muted); font-size: 0.875rem; overflow-wrap: anywhere; }
   .message { overflow-wrap: anywhere; min-width: 0; }
   .message p { margin: 0 0 8px; }
   .message p:last-child, .message ul:last-child, .message ol:last-child { margin-bottom: 0; }
@@ -144,10 +145,14 @@
       const t = document.createElement('span'); t.className = 'when'; t.textContent = when;
       meta.append(w, t);
 
-      const { body, where } = splitDraft(d.md);
+      const { body, where, attachments = [] } = splitDraft(d.md);
       const place = document.createElement('div'); place.className = 'where';
       place.hidden = where === '';
       if (where) place.append(safeHtml(where));
+      // The files live on the Mac, so the page names them for the paste there.
+      const files = document.createElement('p'); files.className = 'files';
+      files.hidden = attachments.length === 0;
+      files.textContent = '\u{1F4CE} Attach on the Mac: ' + attachments.map(p => p.split('/').pop()).join(', ');
 
       const msg = document.createElement('div'); msg.className = 'message';
       msg.append(safeHtml(body));
@@ -173,7 +178,7 @@
       del.addEventListener('click', () => done(false));
       actions.append(copy, sentBtn, del);
 
-      card.append(meta, place, msg, actions, status);
+      card.append(meta, place, files, msg, actions, status);
       list.append(card);
     }
   };
