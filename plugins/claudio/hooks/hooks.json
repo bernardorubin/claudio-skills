@@ -1,1 +1,17 @@
-{ "modules": ["./register.tsx"] }
+{
+  "modules": ["./register.tsx"],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "ArtifactData",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/phone-page-allow.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
