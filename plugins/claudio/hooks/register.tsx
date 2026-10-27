@@ -98,14 +98,16 @@ const pruneSent = async ($: EngineInterface, days: number) => {
 // asks before every ArtifactData call; the tool.check hook below allows this read
 // only while one of this mod's hooks runs (tool.call, /slack-drafts): a timer's calls skip it.
 const PULL_MS = 30_000
-const pullPhoneDeletes = async ($: EngineInterface, url: string, quiet: boolean) => {
+// `approved` (the idleSync option) skips that check: a settings PreToolUse hook (README)
+// approves the read and the sync after it, which a mod's $.tool.check never asks.
+const pullPhoneDeletes = async ($: EngineInterface, url: string, quiet: boolean, approved = false) => {
   if (!url) return
   // every session polls; the shared stamp keeps it to about one read per interval in all
   const now = await $.clock.now()
   if (quiet && now - Number((await $.store.get('phonePulledAt')) ?? 0) < PULL_MS - 1_000) return
   const input = { action: 'query' as const, url, collection: 'drafts', query: { where: [['from', '==', 'phone']], limit: 1000 } }
   // stamped after the check, so a refused pass leaves the slot to one that can read
-  if (quiet && (await $.tool.check({ tool: 'ArtifactData', input })).decision !== 'allow') return
+  if (quiet && !approved && (await $.tool.check({ tool: 'ArtifactData', input })).decision !== 'allow') return
   await $.store.set('phonePulledAt', now)
   const r = await $.tool.call({ tool: 'ArtifactData', ...input })
   if (r.deny !== undefined || r.isError) return
@@ -168,7 +170,7 @@ const syncPhone = async ($: EngineInterface, url: string, list: Draft[]): Promis
 const open = ($: EngineInterface, focus: boolean) =>
   $.ui.open({ id: PANE, title: 'Slack drafts', closeOnEscape: true, ...(focus ? { focus: true as const } : {}) })
 
-const startSlackDrafts = async ($: EngineInterface, url: string, sentDays: number) => {
+const startSlackDrafts = async ($: EngineInterface, url: string, sentDays: number, idleSync: boolean) => {
   await $.command.register({ name: 'slack-drafts', description: 'Show your Slack drafts in a pane and send new ones to the phone page' })
   await pruneSent($, sentDays).catch(() => undefined)
   await refresh($)
@@ -178,7 +180,7 @@ const startSlackDrafts = async ($: EngineInterface, url: string, sentDays: numbe
   $.clock.every(3_000, () => void refresh($).catch(() => undefined))
   // ponytail: a 30s read of the phone page's tombstones (core decides it here, see
   // pullPhoneDeletes; the tool.call hook reads them too); a push if the db ever offers one to a mod
-  $.clock.every(PULL_MS, () => void pullPhoneDeletes($, url, true).catch(() => undefined))
+  $.clock.every(PULL_MS, () => void pullPhoneDeletes($, url, true, idleSync).catch(() => undefined))
 }
 
 // ── first run: point a new install at /vault-init ──
@@ -293,13 +295,14 @@ export const register: Register = (on, options) => {
   const showUsage = options.usageBars === true
   const showPet = options.pet === true
   const sentDays = Number(options.sentDays ?? 1)
+  const idleSync = options.idleSync === true
 
   on('session.start', async ($, e, next) => {
     const ran = await next(e)
     // one mod failing to start must not keep the others from starting
     const failed = (
       await Promise.allSettled([
-        startSlackDrafts($, phoneUrl, sentDays),
+        startSlackDrafts($, phoneUrl, sentDays, idleSync),
         (showUsage || showPet) && startUsageBars($),
         showPet && startPet($),
         nudgeVault($),

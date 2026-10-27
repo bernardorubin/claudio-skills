@@ -261,3 +261,51 @@ test('a saved draft reaches the phone page; anyone else\'s write to the page sti
   const writes = { action: 'batch', url: 'https://claude.ai/artifact/x', writes: [] }
   expect((await $.tool.check({ tool: 'ArtifactData', input: writes })).decision).toBe('ask')
 })
+
+test('with idleSync, an idle poll picks up a Sent tap from the phone page', { options: { phoneUrl: 'https://claude.ai/artifact/x', idleSync: true } }, async ($, on) => {
+  mock.store(on)
+  const clock = mock.clock(on)
+  const NAME = 'nick-1027-1202.md'
+  const rows = [{ id: 'nick-1027-1202-phone-500', data: { name: NAME, deleted: true, sent: true, from: 'phone', savedAt: 500 }, version: 1 }]
+  const runs: string[][] = []
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: 1, mtimeMs: 100, isLink: false }] : [] }))
+  on('fs.read', () => ({ value: DRAFT }))
+  on('process.run', ($, e) => {
+    runs.push([...e.argv])
+    return { value: ok }
+  })
+  on('ui.toast', () => ({ value: undefined }))
+  on('tool.check', () => ({ decision: 'ask' as const })) // what core answers for any ArtifactData call
+  // stands in for the README's settings hook, which approves only this page's reads and syncs
+  on('classic.PreToolUse', ($, e) => {
+    const input = e.tool_input as { url?: string; action?: string }
+    return e.tool_name === 'ArtifactData' && input.url === 'https://claude.ai/artifact/x' && ['query', 'batch'].includes(String(input.action)) ? { allow: true as const } : {}
+  })
+  on('tool.call', () => ({ result: {}, text: `1 document:\n=== BEGIN ===\n${rows.map(r => JSON.stringify(r)).join('\n')}\n=== END ===` }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  await clock.advance(30_000) // no tool call: only the timer runs
+  expect(runs).toContainEqual(['mv', `${DIR}/${NAME}`, `${DIR}/sent/${NAME}`])
+})
+
+test('without idleSync, an idle poll never reads the page, so it can never prompt', { options: { phoneUrl: 'https://claude.ai/artifact/x' } }, async ($, on) => {
+  mock.store(on)
+  const clock = mock.clock(on)
+  const calls: string[] = []
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', () => ({ value: [] }))
+  on('tool.check', () => ({ decision: 'ask' as const })) // what core answers for any ArtifactData call
+  on('tool.call', ($, e) => {
+    calls.push(e.tool)
+    return { result: {}, text: '' }
+  })
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  await clock.advance(30_000)
+  expect(calls).toEqual([])
+})
