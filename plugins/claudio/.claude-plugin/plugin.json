@@ -1,7 +1,7 @@
 {
   "name": "claudio",
   "description": "Claude Code toolkit: confidence-scored code reviews (PR, local, or full-repo audit), git workflow shortcuts, PR/Slack helpers, Claude meta skills, Jira integration, and per-project knowledge vaults (Karpathy-style LLM Wiki). All skills invocable with no prefix.",
-  "version": "4.22.3",
+  "version": "4.22.4",
   "author": {
     "name": "Bernardo Rubin",
     "url": "https://github.com/bernardorubin"
@@ -32,7 +32,7 @@
     "idleSync": {
       "type": "boolean",
       "title": "Slack drafts idle sync",
-      "description": "Pick up Sent and trash taps from the phone page within 30 seconds even while no session is working. Needs the PreToolUse hook from the README in your settings, or each check would ask for approval. Off by default.",
+      "description": "Pick up Sent and trash taps from the phone page within 30 seconds even while no session is working. The plugin's own hook approves those reads (needs python3). Off by default.",
       "default": false
     },
     "sentDays": {

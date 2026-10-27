@@ -98,8 +98,9 @@ const pruneSent = async ($: EngineInterface, days: number) => {
 // asks before every ArtifactData call; the tool.check hook below allows this read
 // only while one of this mod's hooks runs (tool.call, /slack-drafts): a timer's calls skip it.
 const PULL_MS = 30_000
-// `approved` (the idleSync option) skips that check: a settings PreToolUse hook (README)
-// approves the read and the sync after it, which a mod's $.tool.check never asks.
+// `approved` (the idleSync option) skips that check: the plugin's PreToolUse hook
+// (hooks/phone-page-allow.py) approves the read and the sync after it, which a mod's
+// $.tool.check never asks.
 const pullPhoneDeletes = async ($: EngineInterface, url: string, quiet: boolean, approved = false) => {
   if (!url) return
   // every session polls; the shared stamp keeps it to about one read per interval in all
