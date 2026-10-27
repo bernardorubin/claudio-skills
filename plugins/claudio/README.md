@@ -399,6 +399,18 @@ A pane for the drafts `/write-slack-message` saves to `~/Desktop/slack-drafts/`,
 
 **On your phone.** Slack on iOS only keeps formatting when the clipboard carries HTML, which the Claude app cannot put there for a mod. So drafts are mirrored to a private claude.ai artifact ([`slack-drafts-phone/index.html`](slack-drafts-phone/index.html)) whose **Copy for Slack** button does that copy in the browser. Each save, delete or `/slack-drafts` appends rows to that artifact's database through the `ArtifactData` tool. The mod allows its own reads and writes to that one page, so a draft reaches the phone while nobody is at the Mac to approve it; anything else writing to the page still asks. The page shows the newest row per draft and tidies the rest. **Sent** and the **trash icon** on the page do the same to the Mac file (into `sent/`, or to the Trash), within about 30 seconds of the next tool call in any Claude Code session, or at once on `/slack-drafts`.
 
+**Idle sync (optional).** A mod's timer can't approve its own calls, so by default a phone tap waits for the next tool call. To have it picked up within 30 seconds while every session sits idle, add this `PreToolUse` hook to `~/.claude/settings.json` (your phone page's URL in place of the placeholder), then turn on **Slack drafts idle sync** in `/config`. It approves only `query` and `batch` calls to that one page; other artifacts, other actions and your deny rules are untouched. Turn the option on only with the hook in place, or each check asks for approval.
+
+```json
+{
+  "matcher": "ArtifactData",
+  "hooks": [{
+    "type": "command",
+    "command": "jq -c 'select(.tool_input.url == \"https://claude.ai/artifact/YOUR-PAGE\" and (.tool_input.action | IN(\"query\", \"batch\"))) | {hookSpecificOutput: {hookEventName: \"PreToolUse\", permissionDecision: \"allow\"}}'"
+  }]
+}
+```
+
 Set it up once per account:
 
 1. Publish `slack-drafts-phone/index.html` as an artifact with `slack-drafts-phone/slack-html.js` beside it and capabilities `{"db": {"rules": [{"path": "drafts", "read": "owner", "write": "owner"}]}, "user": {}}` (ask Claude to do it).
