@@ -231,3 +231,33 @@ test('moves sent drafts older than the option to the Trash at session start', { 
   const moved = runs.filter(r => r[0] === 'mv').map(r => r[1])
   expect(moved).toEqual([`${DIR}/sent/old-1001-0900.md`])
 })
+
+test('a saved draft reaches the phone page; anyone else\'s write to the page still asks', { options: { phoneUrl: 'https://claude.ai/artifact/x' } }, async ($, on) => {
+  mock.store(on)
+  const NAME = 'nick-1027-1202.md'
+  const synced: unknown[] = []
+  const toasts: string[] = []
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: DRAFT.length, mtimeMs: 100, isLink: false }] : [] }))
+  on('fs.read', () => ({ value: DRAFT }))
+  on('ui.toast', ($, e) => {
+    toasts.push(String(e.text))
+    return { value: undefined }
+  })
+  on('ui.open', () => ({ value: { isPlaced: false } }))
+  on('tool.check', () => ({ decision: 'ask' as const })) // what core answers for any ArtifactData call
+  on('tool.call', ($, e) => {
+    if (e.tool === 'ArtifactData' && (e as { action?: string }).action === 'batch') synced.push((e as { writes?: unknown }).writes)
+    return { result: {}, text: '' }
+  })
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  // saving a draft is what pushes it, with nobody at the Mac to approve the write
+  await $.tool.call({ tool: 'Write', file_path: `${DIR}/${NAME}`, content: DRAFT })
+  expect(synced).toHaveLength(1)
+  expect(toasts.filter(t => t.startsWith('Phone sync failed'))).toEqual([])
+  const writes = { action: 'batch', url: 'https://claude.ai/artifact/x', writes: [] }
+  expect((await $.tool.check({ tool: 'ArtifactData', input: writes })).decision).toBe('ask')
+})

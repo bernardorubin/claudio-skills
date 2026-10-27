@@ -311,13 +311,14 @@ export const register: Register = (on, options) => {
     return ran
   })
 
-  // This mod's own read of its own phone page is allowed; the model's calls,
-  // every write and a settings deny stay as core decides.
+  // This mod's own reads and syncs of its own phone page are allowed, so a draft
+  // reaches the phone while nobody is at the Mac to approve the write. The model's
+  // calls, any other page and a settings deny stay as core decides.
   on('tool.check', { tool: 'ArtifactData' }, async ($, e, next) => {
     const r = await next(e)
     const { action, url } = e.input as { action?: unknown; url?: unknown }
-    const ownRead = phoneUrl !== '' && next.origin.plugin === $.plugin.name && url === phoneUrl && action === 'query'
-    return ownRead && r.decision === 'ask' ? { decision: 'allow' as const } : r
+    const own = phoneUrl !== '' && next.origin.plugin === $.plugin.name && url === phoneUrl && (action === 'query' || action === 'batch')
+    return own && r.decision === 'ask' ? { decision: 'allow' as const } : r
   })
 
   on('command.run', { command: 'slack-drafts' }, async $ => {
