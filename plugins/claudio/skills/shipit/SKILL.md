@@ -22,6 +22,7 @@ orchestra. Lean on:
 | Step | Existing skill |
 |------|----------------|
 | Read / update / comment / transition a ticket | `jira-cli` |
+| Simplify the change before committing | `simplify` (built into Claude Code) |
 | Stage + commit locally (no push) | `git-ac` |
 | Generate / update the PR description | `pr-description` |
 | Self-review before marking ready | `pr-review` (default — a repo may name a specialized reviewer in its CLAUDE.md) |
@@ -208,6 +209,12 @@ for a Shopify theme). Fix what your changes broke; flag pre-existing issues with
 unless asked. For a UI ticket, confirm it actually renders before calling it ready — capture
 screenshots of each key state to `~/Desktop/<TICKET>-screenshots/` as proof (your Playwright QA
 convention).
+
+Once the gates pass, run the built-in `simplify` skill on the change: it reviews the diff for
+reuse, simplification and efficiency and applies the cleanups (quality only; bugs are the review
+cycle's job). Then run the gates again, since its edits are code changes too. Skip it for a
+trivial diff (a one-line fix, a copy or config tweak), and say so when it isn't available in
+this Claude Code. Doing it before the commit means the review cycle sees the simplified code.
 
 Commit with `git-ac` **only if `git status` shows just this task's files** — it runs
 `git add -A` and will sweep up unrelated edits. If there are stray changes, fall back to
