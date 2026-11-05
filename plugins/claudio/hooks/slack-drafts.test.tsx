@@ -374,6 +374,10 @@ test('/slack-drafts publishes a phone page where none is set', async ($, on) => 
   expect(prompts).toHaveLength(1)
   expect(prompts[0]).toContain('/slack-drafts-phone/index.html')
   expect(prompts[0]).not.toContain('claude.ai/artifact')
+  // a second run before the publish lands asks for no second page
+  expect((await $.command.run({ command: 'slack-drafts' })).text).toContain('already publishing')
+  await clock.advance(1)
+  expect(prompts).toHaveLength(1)
 })
 
 test('a session with no link follows a page another session already published', async ($, on) => {

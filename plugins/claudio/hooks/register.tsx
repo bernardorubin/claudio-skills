@@ -183,6 +183,9 @@ const newPagePrompt = (root: string) =>
   `then publish with file_path set to the full path of that index.html (no root, no url), files {"slack-html.js": <the copied slack-html.js>}, capabilities {"db": {"rules": [{"path": "drafts", "read": "owner", "write": "owner"}]}, "user": {}}, ` +
   `icon "message" and pin: true. The plugin saves the new link and sends the drafts there itself, so just give me the link.`
 
+// ponytail: a 2-minute hold between publish requests; a declined or failed publish can be retried after it
+const ASK_MS = 120_000
+
 // Each replaced link (or '' for none) -> its replacement, shared by every session (the store), so a
 // session still holding a dead link, or none, follows the new page instead of publishing a second one.
 const followMoves = async ($: EngineInterface, url: string) => {
@@ -359,6 +362,11 @@ export const register: Register = (on, options) => {
     await open($, true)
     const count = `${list.length} draft${list.length === 1 ? '' : 's'} in the pane`
     if (phoneUrl === '' || pulled === 'gone') {
+      // one request at a time across sessions, so a second run before the publish lands makes no second page
+      const now = await $.clock.now()
+      const askedAt = await $.store.get('phoneAskedAt')
+      if (typeof askedAt === 'number' && now - askedAt < ASK_MS) return { text: `${count}; Claude is already publishing a phone page.` }
+      await $.store.set('phoneAskedAt', now)
       // a command.run hook cannot submit (the turn would wait on this hook), so it goes once the hook returns
       $.clock.after(0, () => void $.prompt.submit({ text: newPagePrompt($.plugin.root) }).catch(() => undefined))
       return { text: `${count}; ${phoneUrl === '' ? 'no phone page yet' : 'the phone page no longer opens'}, so Claude is publishing one.` }
