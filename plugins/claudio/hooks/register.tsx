@@ -328,6 +328,9 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'slack-drafts' }, async $ => {
     await pullPhoneDeletes($, phoneUrl, false).catch(() => undefined)
     const list = await refresh($)
+    // opening an id the engine still holds only retitles it, so a held pane nobody sees is closed and opened anew
+    const held = (await $.ui.panes()).find(p => p.id === PANE)
+    if (held && !(held.isShown && held.isPlaced)) await $.ui.close({ id: PANE })
     await open($, true)
     const phone = await syncPhone($, phoneUrl, list)
     return { text: `${list.length} draft${list.length === 1 ? '' : 's'} in the pane, ${phone}.` }
