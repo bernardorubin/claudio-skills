@@ -71,11 +71,11 @@ export const toHtml = (md: string) => {
   return out.join('')
 }
 
-// Pane display only: a typed @name pastes into Slack as plain text, not a tag, so the pane
-// colors each one to be re-tagged after pasting. Markdown cannot color a word, so a line
-// with a mention becomes Text runs (its list or quote marker as `prefix`) and every other
-// line stays Markdown. Emails, code spans and fences are left alone.
-const MENTION = /(?<=^|[\s(])(@\w+(?:[.-]\w+)*)/
+// Display only (the pane and the phone page): a typed @name pastes into Slack as plain text,
+// not a tag, so both color each one to be re-tagged after pasting. Markdown cannot color a
+// word, so in the pane a line with a mention becomes Text runs (its list or quote marker as
+// `prefix`) and every other line stays Markdown. Emails, code spans and fences are left alone.
+export const MENTION =/(?<=^|[\s(])(@\w+(?:[.-]\w+)*)/
 const MARKER = /^(\s*(?:\d+\.\s+|[-*]\s+|>\s?))?(.*)$/
 export type Run = { text: string; kind?: 'mention' | 'code' | 'link'; href?: string }
 export type Block = { md: string } | { prefix: string; runs: Run[] }
