@@ -399,11 +399,13 @@ A pane for the drafts `/write-slack-message` saves to `~/Desktop/slack-drafts/`,
 
 **On your phone.** Slack on iOS only keeps formatting when the clipboard carries HTML, which the Claude app cannot put there for a mod. So drafts are mirrored to a private claude.ai artifact ([`slack-drafts-phone/index.html`](slack-drafts-phone/index.html)) whose **Copy for Slack** button does that copy in the browser. Each save, delete or `/slack-drafts` appends rows to that artifact's database through the `ArtifactData` tool. The mod allows its own reads and writes to that one page, so a draft reaches the phone while nobody is at the Mac to approve it; anything else writing to the page still asks. The page shows the newest row per draft and tidies the rest. **Sent** and the **trash icon** on the page do the same to the Mac file (into `sent/`, or to the Trash), within about 30 seconds of the next tool call in any Claude Code session, or at once on `/slack-drafts`.
 
+**If the page stops opening** (deleted, or Claude Code signed in to an account that doesn't own it), `/slack-drafts` has Claude publish a new copy, pinned, and the mod switches its **Slack drafts phone page** option to the new link and resends the drafts there. Open the new link on the phone once; the old pin no longer updates.
+
 **Idle sync (optional).** By default a phone tap waits for the next tool call, because a mod's timer can't approve its own calls. Turn on **Slack drafts idle sync** in `/config` to have taps picked up within 30 seconds while every session sits idle. The plugin ships a `PreToolUse` hook (`hooks/phone-page-allow.py`, needs `python3`) that approves only `query` and `batch` calls to your phone page; other artifacts, other actions and your own deny/ask rules are untouched. Nothing to add to `settings.json`.
 
 Set it up once per account:
 
-1. Publish `slack-drafts-phone/index.html` as an artifact with `slack-drafts-phone/slack-html.js` beside it and capabilities `{"db": {"rules": [{"path": "drafts", "read": "owner", "write": "owner"}]}, "user": {}}` (ask Claude to do it).
+1. Publish `slack-drafts-phone/index.html` as an artifact with `slack-drafts-phone/slack-html.js` beside it and capabilities `{"db": {"rules": [{"path": "drafts", "read": "owner", "write": "owner"}]}, "user": {}}`, pinned (ask Claude to do it).
 2. Put its URL in the plugin's **Slack drafts phone page** option (`/config`, or `pluginConfigs["claudio@claudio"].options.phoneUrl` in `~/.claude/settings.json`).
 3. Pin the page in claude.ai so it is one tap away on the phone.
 

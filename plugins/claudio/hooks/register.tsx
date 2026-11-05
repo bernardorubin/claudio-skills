@@ -101,7 +101,8 @@ const PULL_MS = 30_000
 // `approved` (the idleSync option) skips that check: the plugin's PreToolUse hook
 // (hooks/phone-page-allow.py) approves the read and the sync after it, which a mod's
 // $.tool.check never asks.
-const pullPhoneDeletes = async ($: EngineInterface, url: string, quiet: boolean, approved = false) => {
+// Resolves 'gone' when the page no longer opens for this account (deleted, or another account's page).
+const pullPhoneDeletes = async ($: EngineInterface, url: string, quiet: boolean, approved = false): Promise<'gone' | undefined> => {
   if (!url) return
   // every session polls; the shared stamp keeps it to about one read per interval in all
   const now = await $.clock.now()
@@ -111,7 +112,8 @@ const pullPhoneDeletes = async ($: EngineInterface, url: string, quiet: boolean,
   if (quiet && !approved && (await $.tool.check({ tool: 'ArtifactData', input })).decision !== 'allow') return
   await $.store.set('phonePulledAt', now)
   const r = await $.tool.call({ tool: 'ArtifactData', ...input })
-  if (r.deny !== undefined || r.isError) return
+  if (r.deny !== undefined) return
+  if (r.isError) return /no such artifact/i.test(r.text ?? '') ? 'gone' : undefined
   // the read comes back as one JSON document per line between two marker lines
   const latest = new Map<string, { at: number; sent: boolean }>()
   for (const line of (r.text ?? '').split('\n')) {
@@ -148,7 +150,8 @@ const docId = (name: string, at: number) =>
 // Returns what happened, for /slack-drafts to say; failures also toast.
 const syncPhone = async ($: EngineInterface, url: string, list: Draft[]): Promise<string> => {
   if (!url) return 'phone page off (set its URL in /config)'
-  const synced = ((await $.store.get('synced')) ?? {}) as Record<string, number>
+  // a new page starts empty, so the record of what was sent counts only for the page it was sent to
+  const synced = ((await $.store.get('syncedUrl')) === url ? ((await $.store.get('synced')) ?? {}) : {}) as Record<string, number>
   const now = Date.now()
   const changed = list.filter(d => synced[d.name] !== d.mtimeMs)
   const gone = Object.keys(synced).filter(name => !list.some(d => d.name === name))
@@ -165,13 +168,27 @@ const syncPhone = async ($: EngineInterface, url: string, list: Draft[]): Promis
   }
   const next = Object.fromEntries(list.map(d => [d.name, d.mtimeMs]))
   await $.store.set('synced', next)
+  await $.store.set('syncedUrl', url)
   return `sent ${writes.length} change${writes.length === 1 ? '' : 's'} to the phone page`
 }
 
 const open = ($: EngineInterface, focus: boolean) =>
   $.ui.open({ id: PANE, title: 'Slack drafts', closeOnEscape: true, ...(focus ? { focus: true as const } : {}) })
 
-const startSlackDrafts = async ($: EngineInterface, url: string, sentDays: number, idleSync: boolean) => {
+// The mod cannot publish the page itself (an artifact's files must sit in the working
+// directory or Claude's scratchpad), so Claude does, and the tool.call hook saves the link.
+const republishPrompt = (root: string, old: string) =>
+  `The Slack Drafts phone page (${old}) no longer opens for this Claude account, so publish it again as a new artifact. ` +
+  `Copy ${root}/slack-drafts-phone/index.html and ${root}/slack-drafts-phone/slack-html.js into a folder named slack-drafts-phone in your scratchpad, read both, ` +
+  `then publish that index.html with files {"slack-html.js": <the copied slack-html.js>}, capabilities {"db": {"rules": [{"path": "drafts", "read": "owner", "write": "owner"}]}, "user": {}}, ` +
+  `icon "message" and pin: true. The claudio plugin saves the new link and resends the drafts itself, so just give me the link.`
+
+// "Published <file> at <url> (Version 1, ...)": the link of a publish of the phone page, or null.
+const PUBLISHED = /^Published .* at (https:\/\/claude\.ai\/\S*artifact\/[\w-]+)/
+const publishedPhoneUrl = (filePath: unknown, text: string | undefined) =>
+  /slack-drafts-phone\/index\.html$/.test(String(filePath ?? '')) ? (PUBLISHED.exec(text ?? '')?.[1] ?? null) : null
+
+const startSlackDrafts = async ($: EngineInterface, phone: () => string, sentDays: number, idleSync: boolean) => {
   await $.command.register({ name: 'slack-drafts', description: 'Show your Slack drafts in a pane and send new ones to the phone page' })
   await pruneSent($, sentDays).catch(() => undefined)
   await refresh($)
@@ -181,7 +198,7 @@ const startSlackDrafts = async ($: EngineInterface, url: string, sentDays: numbe
   $.clock.every(3_000, () => void refresh($).catch(() => undefined))
   // ponytail: a 30s read of the phone page's tombstones (core decides it here, see
   // pullPhoneDeletes; the tool.call hook reads them too); a push if the db ever offers one to a mod
-  $.clock.every(PULL_MS, () => void pullPhoneDeletes($, url, true, idleSync).catch(() => undefined))
+  $.clock.every(PULL_MS, () => void pullPhoneDeletes($, phone(), true, idleSync).catch(() => undefined))
 }
 
 // ── first run: point a new install at /vault-init ──
@@ -292,7 +309,8 @@ const startPet = async ($: EngineInterface) => {
 }
 
 export const register: Register = (on, options) => {
-  const phoneUrl = String(options.phoneUrl ?? '')
+  // replaced when the page is published anew (the tool.call hook below)
+  let phoneUrl = String(options.phoneUrl ?? '')
   const showUsage = options.usageBars === true
   const showPet = options.pet === true
   const sentDays = Number(options.sentDays ?? 1)
@@ -303,7 +321,7 @@ export const register: Register = (on, options) => {
     // one mod failing to start must not keep the others from starting
     const failed = (
       await Promise.allSettled([
-        startSlackDrafts($, phoneUrl, sentDays, idleSync),
+        startSlackDrafts($, () => phoneUrl, sentDays, idleSync),
         (showUsage || showPet) && startUsageBars($),
         showPet && startPet($),
         nudgeVault($),
@@ -326,11 +344,17 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: 'slack-drafts' }, async $ => {
-    await pullPhoneDeletes($, phoneUrl, false).catch(() => undefined)
+    const pulled = await pullPhoneDeletes($, phoneUrl, false).catch(() => undefined)
     const list = await refresh($)
     await open($, true)
-    const phone = await syncPhone($, phoneUrl, list)
-    return { text: `${list.length} draft${list.length === 1 ? '' : 's'} in the pane, ${phone}.` }
+    const count = `${list.length} draft${list.length === 1 ? '' : 's'} in the pane`
+    if (pulled === 'gone') {
+      // a command.run hook cannot submit (the turn would wait on this hook), so it goes once the hook returns
+      const old = phoneUrl
+      $.clock.after(0, () => void $.prompt.submit({ text: republishPrompt($.plugin.root, old) }).catch(() => undefined))
+      return { text: `${count}; the phone page no longer opens, so Claude is publishing a new one.` }
+    }
+    return { text: `${count}, ${await syncPhone($, phoneUrl, list)}.` }
   })
 
   // The one unmatched tool.call hook the engine allows, for both mods. The pet:
@@ -363,6 +387,13 @@ export const register: Register = (on, options) => {
     }
     await pulling
     if (!isDraft) return ran
+    // a publish of the phone page (the /slack-drafts republish, or one by hand) becomes the page drafts go to
+    const published = e.tool === 'Artifact' ? publishedPhoneUrl(e.file_path, ran.text) : null
+    if (published !== null && published !== phoneUrl) {
+      phoneUrl = published
+      const saved = await $.config.set({ key: `${$.plugin.name}.phoneUrl`, value: published })
+      $.ui.toast(saved.deny === undefined ? 'New phone page saved; drafts go there now' : `Could not save the new phone page link: ${saved.deny}`)
+    }
     const list = await refresh($)
     if ((list[0]?.mtimeMs ?? 0) > newest) void open($, false)
     await syncPhone($, phoneUrl, list)

@@ -309,3 +309,47 @@ test('without idleSync, an idle poll never reads the page, so it can never promp
   await clock.advance(30_000)
   expect(calls).toEqual([])
 })
+
+test('/slack-drafts asks Claude to republish a phone page that no longer opens, then syncs to the new link', { options: { phoneUrl: 'https://claude.ai/artifact/old' } }, async ($, on) => {
+  mock.store(on)
+  const clock = mock.clock(on)
+  const NAME = 'nick-1014-1530.md'
+  const prompts: string[] = []
+  const saved: [string, unknown][] = []
+  const calls: string[] = []
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', () => ({ value: [{ name: NAME, kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false }] }))
+  on('fs.read', () => ({ value: DRAFT }))
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('tool.check', () => ({ decision: 'allow' as const }))
+  on('prompt.submit', ($, e) => {
+    prompts.push(e.text)
+    return { text: e.text }
+  })
+  on('config.set', ($, e) => {
+    saved.push([e.key, e.value])
+    return { value: e.value }
+  })
+  on('tool.call', ($, e) => {
+    if (e.tool !== 'ArtifactData') return { result: {}, text: 'Published /tmp/pad/slack-drafts-phone/index.html at https://claude.ai/artifact/NEW1 (Version 1, version id 1)' }
+    calls.push(`${e.action} ${e.url}`)
+    return e.url.endsWith('/old')
+      ? { result: {}, isError: true, text: 'db read failed (invalid_argument): no such artifact, collection, or document' }
+      : { result: {}, text: '0 documents' }
+  })
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  await $.command.run({ command: 'slack-drafts' })
+  await clock.advance(1) // the prompt goes once the command's hook has returned
+  expect(prompts).toHaveLength(1)
+  expect(prompts[0]).toContain('/slack-drafts-phone/index.html')
+  expect(calls).not.toContain('batch https://claude.ai/artifact/old')
+
+  // Claude's publish of the page: its link is saved and the drafts go there
+  await $.tool.call({ tool: 'Artifact', action: 'publish', file_path: '/tmp/pad/slack-drafts-phone/index.html' })
+  expect(saved).toEqual([['claudio.phoneUrl', 'https://claude.ai/artifact/NEW1']])
+  expect(calls).toContain('batch https://claude.ai/artifact/NEW1')
+})
