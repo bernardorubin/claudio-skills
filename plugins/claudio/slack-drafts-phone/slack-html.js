@@ -20,6 +20,7 @@ var SlackHtml = (() => {
   // hooks/slack-html.ts
   var slack_html_exports = {};
   __export(slack_html_exports, {
+    MENTION: () => MENTION,
     clipboardScript: () => clipboardScript,
     labelOf: () => labelOf,
     mentionBlocks: () => mentionBlocks,
