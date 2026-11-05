@@ -1,7 +1,7 @@
 {
   "name": "claudio",
   "description": "Claude Code toolkit: confidence-scored code reviews (PR, local, or full-repo audit), git workflow shortcuts, PR/Slack helpers, Claude meta skills, Jira integration, and per-project knowledge vaults (Karpathy-style LLM Wiki). All skills invocable with no prefix.",
-  "version": "4.22.6",
+  "version": "4.23.0",
   "author": {
     "name": "Bernardo Rubin",
     "url": "https://github.com/bernardorubin"
@@ -14,7 +14,7 @@
     "phoneUrl": {
       "type": "string",
       "title": "Slack drafts phone page",
-      "description": "The claude.ai artifact URL of your Slack Drafts phone page. Each saved draft is copied there so you can paste it from your phone. Empty turns it off.",
+      "description": "The claude.ai artifact URL of your Slack Drafts phone page. Each saved draft is copied there so you can paste it from your phone. /slack-drafts publishes a page and fills this in when it is empty or the page no longer opens.",
       "default": ""
     },
     "usageBars": {

@@ -149,7 +149,7 @@ const docId = (name: string, at: number) =>
 
 // Returns what happened, for /slack-drafts to say; failures also toast.
 const syncPhone = async ($: EngineInterface, url: string, list: Draft[]): Promise<string> => {
-  if (!url) return 'phone page off (set its URL in /config)'
+  if (!url) return 'no phone page yet'
   // a new page starts empty, so the record of what was sent counts only for the page it was sent to
   const synced = ((await $.store.get('syncedUrl')) === url ? ((await $.store.get('synced')) ?? {}) : {}) as Record<string, number>
   const now = Date.now()
@@ -177,11 +177,22 @@ const open = ($: EngineInterface, focus: boolean) =>
 
 // The mod cannot publish the page itself (an artifact's files must sit in the working
 // directory or Claude's scratchpad), so Claude does, and the tool.call hook saves the link.
-const republishPrompt = (root: string, old: string) =>
-  `The Slack Drafts phone page (${old}) no longer opens for this Claude account, so publish it again as a new artifact. ` +
+const newPagePrompt = (root: string) =>
+  `Publish a new Slack Drafts phone page for the claudio plugin, as a new artifact. ` +
   `Copy ${root}/slack-drafts-phone/index.html and ${root}/slack-drafts-phone/slack-html.js into a folder named slack-drafts-phone in your scratchpad, read both, ` +
-  `then publish with file_path set to the full path of that index.html (no root), files {"slack-html.js": <the copied slack-html.js>}, capabilities {"db": {"rules": [{"path": "drafts", "read": "owner", "write": "owner"}]}, "user": {}}, ` +
-  `icon "message" and pin: true. The claudio plugin saves the new link and resends the drafts itself, so just give me the link.`
+  `then publish with file_path set to the full path of that index.html (no root, no url), files {"slack-html.js": <the copied slack-html.js>}, capabilities {"db": {"rules": [{"path": "drafts", "read": "owner", "write": "owner"}]}, "user": {}}, ` +
+  `icon "message" and pin: true. The plugin saves the new link and sends the drafts there itself, so just give me the link.`
+
+// ponytail: a 2-minute hold between publish requests; a declined or failed publish can be retried after it
+const ASK_MS = 120_000
+
+// Each replaced link (or '' for none) -> its replacement, shared by every session (the store), so a
+// session still holding a dead link, or none, follows the new page instead of publishing a second one.
+const followMoves = async ($: EngineInterface, url: string) => {
+  const moves = ((await $.store.get('phoneMoves')) ?? {}) as Record<string, string>
+  for (let hops = 0; moves[url] !== undefined && hops < 20; hops++) url = moves[url] ?? url
+  return url
+}
 
 // "Published <file> at <url> (Version 1, ...)": the link of a publish of the phone page, or null.
 const PUBLISHED = /^Published .* at (https:\/\/claude\.ai\/\S*artifact\/[\w-]+)/
@@ -343,16 +354,22 @@ export const register: Register = (on, options) => {
     return own && r.decision === 'ask' ? { decision: 'allow' as const } : r
   })
 
+  // With no phone page set, or one that no longer opens, Claude publishes a new one.
   on('command.run', { command: 'slack-drafts' }, async $ => {
+    phoneUrl = await followMoves($, phoneUrl)
     const pulled = await pullPhoneDeletes($, phoneUrl, false).catch(() => undefined)
     const list = await refresh($)
     await open($, true)
     const count = `${list.length} draft${list.length === 1 ? '' : 's'} in the pane`
-    if (pulled === 'gone') {
+    if (phoneUrl === '' || pulled === 'gone') {
+      // one request at a time across sessions, so a second run before the publish lands makes no second page
+      const now = await $.clock.now()
+      const askedAt = await $.store.get('phoneAskedAt')
+      if (typeof askedAt === 'number' && now - askedAt < ASK_MS) return { text: `${count}; Claude is already publishing a phone page.` }
+      await $.store.set('phoneAskedAt', now)
       // a command.run hook cannot submit (the turn would wait on this hook), so it goes once the hook returns
-      const old = phoneUrl
-      $.clock.after(0, () => void $.prompt.submit({ text: republishPrompt($.plugin.root, old) }).catch(() => undefined))
-      return { text: `${count}; the phone page no longer opens, so Claude is publishing a new one.` }
+      $.clock.after(0, () => void $.prompt.submit({ text: newPagePrompt($.plugin.root) }).catch(() => undefined))
+      return { text: `${count}; ${phoneUrl === '' ? 'no phone page yet' : 'the phone page no longer opens'}, so Claude is publishing one.` }
     }
     return { text: `${count}, ${await syncPhone($, phoneUrl, list)}.` }
   })
@@ -365,7 +382,9 @@ export const register: Register = (on, options) => {
   // changed one opens the pane; any call reads the phone page's Sent and trash
   // taps (at most every 30s), alongside the tool.
   on('tool.call', async ($, e, next) => {
-    const pulling = pullPhoneDeletes($, phoneUrl, true).catch(() => undefined)
+    const pulling = followMoves($, phoneUrl)
+      .then(url => pullPhoneDeletes($, (phoneUrl = url), true))
+      .catch(() => undefined)
     const isDraft = e.tool !== 'ArtifactData' && JSON.stringify(e).includes('slack-drafts')
     if (!showPet && !isDraft) return next(e).finally(() => pulling)
     if (showPet && (e.tool === 'AskUserQuestion' || e.tool === 'ExitPlanMode')) await block($, e.tool)
@@ -390,6 +409,7 @@ export const register: Register = (on, options) => {
     // a publish of the phone page (the /slack-drafts republish, or one by hand) becomes the page drafts go to
     const published = e.tool === 'Artifact' ? publishedPhoneUrl(e.file_path, ran.text) : null
     if (published !== null && published !== phoneUrl) {
+      await $.store.set('phoneMoves', { ...(((await $.store.get('phoneMoves')) ?? {}) as Record<string, string>), [phoneUrl]: published })
       phoneUrl = published
       const saved = await $.config.set({ key: `${$.plugin.name}.phoneUrl`, value: published })
       $.ui.toast(saved.deny === undefined ? 'New phone page saved; drafts go there now' : `Could not save the new phone page link: ${saved.deny}`)

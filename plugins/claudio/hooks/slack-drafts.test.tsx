@@ -353,3 +353,86 @@ test('/slack-drafts asks Claude to republish a phone page that no longer opens, 
   expect(saved).toEqual([['claudio.phoneUrl', 'https://claude.ai/artifact/NEW1']])
   expect(calls).toContain('batch https://claude.ai/artifact/NEW1')
 })
+
+test('/slack-drafts publishes a phone page where none is set', async ($, on) => {
+  mock.store(on)
+  const clock = mock.clock(on)
+  const prompts: string[] = []
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', () => ({ value: [] }))
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('prompt.submit', ($, e) => {
+    prompts.push(e.text)
+    return { text: e.text }
+  })
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  expect((await $.command.run({ command: 'slack-drafts' })).text).toContain('no phone page yet')
+  await clock.advance(1)
+  expect(prompts).toHaveLength(1)
+  expect(prompts[0]).toContain('/slack-drafts-phone/index.html')
+  expect(prompts[0]).not.toContain('claude.ai/artifact')
+  // a second run before the publish lands asks for no second page
+  expect((await $.command.run({ command: 'slack-drafts' })).text).toContain('already publishing')
+  await clock.advance(1)
+  expect(prompts).toHaveLength(1)
+})
+
+test('a session with no link follows a page another session already published', async ($, on) => {
+  mock.store(on, { phoneMoves: { '': 'https://claude.ai/artifact/NEW1' } })
+  const clock = mock.clock(on)
+  const prompts: string[] = []
+  const calls: string[] = []
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', () => ({ value: [] }))
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('tool.check', () => ({ decision: 'allow' as const }))
+  on('prompt.submit', ($, e) => {
+    prompts.push(e.text)
+    return { text: e.text }
+  })
+  on('tool.call', ($, e) => {
+    if (e.tool === 'ArtifactData') calls.push(`${e.action} ${e.url}`)
+    return { result: {}, text: '0 documents' }
+  })
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  await $.command.run({ command: 'slack-drafts' })
+  await clock.advance(1)
+  expect(prompts).toEqual([])
+  expect(calls).toContain('query https://claude.ai/artifact/NEW1')
+})
+
+test('a session still holding a replaced link follows the new page instead of publishing another', { options: { phoneUrl: 'https://claude.ai/artifact/old' } }, async ($, on) => {
+  // another session already replaced old with NEW1
+  mock.store(on, { phoneMoves: { 'https://claude.ai/artifact/old': 'https://claude.ai/artifact/NEW1' } })
+  const clock = mock.clock(on)
+  const prompts: string[] = []
+  const calls: string[] = []
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', () => ({ value: [{ name: 'nick-1014-1530.md', kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false }] }))
+  on('fs.read', () => ({ value: DRAFT }))
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('tool.check', () => ({ decision: 'allow' as const }))
+  on('prompt.submit', ($, e) => {
+    prompts.push(e.text)
+    return { text: e.text }
+  })
+  on('tool.call', ($, e) => {
+    if (e.tool === 'ArtifactData') calls.push(`${e.action} ${e.url}`)
+    return { result: {}, text: '0 documents' }
+  })
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  await $.command.run({ command: 'slack-drafts' })
+  await clock.advance(1)
+  expect(prompts).toEqual([])
+  expect(calls).toContain('batch https://claude.ai/artifact/NEW1')
+  expect(calls.some(c => c.endsWith('/old'))).toBe(false)
+})
