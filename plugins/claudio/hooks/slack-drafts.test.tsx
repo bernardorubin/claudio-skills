@@ -309,30 +309,3 @@ test('without idleSync, an idle poll never reads the page, so it can never promp
   await clock.advance(30_000)
   expect(calls).toEqual([])
 })
-
-test('/slack-drafts reopens a pane the engine holds but does not show, and leaves a shown one open', async ($, on) => {
-  let pane = { id: 'slack-drafts', title: 'Slack drafts', isShown: false, isFocused: false, isPlaced: false }
-  const calls: string[] = []
-  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', () => ({ value: [] }))
-  on('ui.panes', () => ({ value: [pane] }))
-  on('ui.close', () => {
-    calls.push('close')
-    return { value: undefined }
-  })
-  on('ui.open', () => {
-    calls.push('open')
-    return { value: { isPlaced: true as const } }
-  })
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('session.start', () => ({ cwd: '/Users/test' }))
-
-  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
-  await $.command.run({ command: 'slack-drafts' })
-  expect(calls).toEqual(['close', 'open'])
-
-  pane = { ...pane, isShown: true, isPlaced: true }
-  calls.length = 0
-  await $.command.run({ command: 'slack-drafts' })
-  expect(calls).toEqual(['open'])
-})

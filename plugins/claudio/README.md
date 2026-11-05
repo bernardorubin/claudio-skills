@@ -390,7 +390,7 @@ Desktop draws an animated SVG (still under reduced motion); the terminal draws a
 
 A pane for the drafts `/write-slack-message` saves to `~/Desktop/slack-drafts/`, plus an optional phone page so you can paste them from your iPhone with Slack formatting intact.
 
-- `/slack-drafts` opens the pane (and reopens it if it was left open but not showing): one card per draft, newest first, rendered as Markdown with each `@name` in purple (a typed @ pastes as plain text, so those are the ones to re-tag in Slack), with where to post it and who to tag (linked) above the message when the skill found them.
+- `/slack-drafts` opens the pane: one card per draft, newest first, rendered as Markdown with each `@name` in purple (a typed @ pastes as plain text, so those are the ones to re-tag in Slack), with where to post it and who to tag (linked) above the message when the skill found them.
 - A draft whose header lists `attach:` files (screenshots, recordings) shows a 📎 button per file that selects it in Finder, ready to drag into the Slack message. The phone page names those files under the message, since they stay on the Mac.
 - Saving a draft opens the pane on its own, and a save or delete in any session shows in every open pane within a few seconds.
 - **Copy for Slack** puts an HTML version on the Mac clipboard (via `osascript`), so `[label](url)` pastes as a link and backticks as code.
