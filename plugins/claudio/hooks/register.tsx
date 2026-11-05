@@ -180,7 +180,7 @@ const open = ($: EngineInterface, focus: boolean) =>
 const republishPrompt = (root: string, old: string) =>
   `The Slack Drafts phone page (${old}) no longer opens for this Claude account, so publish it again as a new artifact. ` +
   `Copy ${root}/slack-drafts-phone/index.html and ${root}/slack-drafts-phone/slack-html.js into a folder named slack-drafts-phone in your scratchpad, read both, ` +
-  `then publish that index.html with files {"slack-html.js": <the copied slack-html.js>}, capabilities {"db": {"rules": [{"path": "drafts", "read": "owner", "write": "owner"}]}, "user": {}}, ` +
+  `then publish with file_path set to the full path of that index.html (no root), files {"slack-html.js": <the copied slack-html.js>}, capabilities {"db": {"rules": [{"path": "drafts", "read": "owner", "write": "owner"}]}, "user": {}}, ` +
   `icon "message" and pin: true. The claudio plugin saves the new link and resends the drafts itself, so just give me the link.`
 
 // "Published <file> at <url> (Version 1, ...)": the link of a publish of the phone page, or null.
