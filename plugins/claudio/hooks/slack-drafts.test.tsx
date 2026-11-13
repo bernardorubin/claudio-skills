@@ -436,3 +436,88 @@ test('a session still holding a replaced link follows the new page instead of pu
   expect(calls).toContain('batch https://claude.ai/artifact/NEW1')
   expect(calls.some(c => c.endsWith('/old'))).toBe(false)
 })
+
+test('/slack-drafts still answers in a session that cannot reach artifacts', { options: { phoneUrl: 'https://claude.ai/artifact/x' } }, async ($, on) => {
+  mock.store(on)
+  const NAME = 'jose-1113-1122.md'
+  const toasts: string[] = []
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false }] : [] }))
+  on('fs.read', () => ({ value: DRAFT }))
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('ui.toast', ($, e) => {
+    toasts.push(String(e.text))
+    return { value: undefined }
+  })
+  on('tool.check', () => ({ decision: 'allow' as const }))
+  // what a session without the artifact tools does: the call itself fails
+  on('tool.call', ($, e) => {
+    if (e.tool === 'ArtifactData') throw new Error('No such tool available: ArtifactData')
+    return { result: {}, text: '' }
+  })
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  await $.session.start({ cwd: '/Users/test', surface: 'mobile', isInteractive: true })
+  const r = await $.command.run({ command: 'slack-drafts' })
+  expect(JSON.stringify(r)).toContain('1 draft in the pane')
+  expect(JSON.stringify(r)).toContain("can't reach artifacts")
+})
+
+test('with idleSync, another session pushes a draft the saving session could not', { options: { phoneUrl: 'https://claude.ai/artifact/x', idleSync: true } }, async ($, on) => {
+  mock.store(on)
+  const clock = mock.clock(on)
+  const NAME = 'jose-1113-1122.md'
+  const batches: unknown[] = []
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: 1, mtimeMs: 100, isLink: false }] : [] }))
+  on('fs.read', () => ({ value: DRAFT }))
+  on('ui.toast', () => ({ value: undefined }))
+  // stands in for the plugin's PreToolUse hook (phone-page-allow.py), which approves this page's syncs
+  on('tool.check', () => ({ decision: 'allow' as const }))
+  on('tool.call', ($, e) => {
+    if (e.tool === 'ArtifactData' && (e as { action?: string }).action === 'batch') batches.push((e as { writes?: unknown }).writes)
+    return { result: {}, text: '0 documents' }
+  })
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  // this session saw no Write: the draft came from another session's folder write
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  await clock.advance(30_000)
+  expect(batches).toHaveLength(1)
+  // the shared record now holds it, so the next tick sends nothing again
+  await clock.advance(30_000)
+  expect(batches).toHaveLength(1)
+})
+
+test('on the phone, a saved draft shows as a card under its Write row', async ($, on) => {
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', () => ({ value: [] }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+  on('ui.render', ($, e) => {
+    const { Box } = $.ui.resolve(e)
+    return <Box key="engine" />
+  })
+  await $.session.start({ cwd: '/Users/test', surface: 'mobile', isInteractive: true })
+
+  const RAW = '---\npost_in: [DM with Jose](https://x.test/team/U1)\n---\nPR #946 is merged.'
+  const row = (file_path: string) => ({
+    component: 'ToolUse' as const,
+    requestId: 't1',
+    props: { tool_use_id: 't1', tool: 'Write', input: { file_path, content: RAW }, isRunning: false, isErrored: false, isInterrupted: false },
+  })
+  const phone = await $.ui.mount({ plugin: 'claudio', surface: 'mobile', ...row(`${DIR}/jose-1113-1122.md`) })
+  expect(await phone.find({ type: 'Text', text: 'Slack draft for jose' })).toBeDefined()
+  expect(await phone.find({ key: 'engine' })).toBeDefined()
+  await phone.unmount()
+
+  // the desktop already shows the file; and a write elsewhere is left alone on the phone too
+  const desk = await $.ui.mount({ plugin: 'claudio', surface: 'desktop', ...row(`${DIR}/jose-1113-1122.md`) })
+  expect(await desk.find({ type: 'Text', text: 'Slack draft for jose' })).toBeUndefined()
+  await desk.unmount()
+  const other = await $.ui.mount({ plugin: 'claudio', surface: 'mobile', ...row('/Users/test/notes.md') })
+  expect(await other.find({ type: 'Text', text: 'Slack draft for jose' })).toBeUndefined()
+  await other.unmount()
+})

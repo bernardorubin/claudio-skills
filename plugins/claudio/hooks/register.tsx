@@ -147,8 +147,8 @@ const pullPhoneDeletes = async ($: EngineInterface, url: string, quiet: boolean,
 const docId = (name: string, at: number) =>
   `${name.replace(/\.md$/, '').replace(/[^A-Za-z0-9_.~:@+-]/g, '_')}-${Math.round(at)}`
 
-// Returns what happened, for /slack-drafts to say; failures also toast.
-const syncPhone = async ($: EngineInterface, url: string, list: Draft[]): Promise<string> => {
+// Returns what happened, for /slack-drafts to say; failures also toast unless `quiet` (the idle push).
+const syncPhone = async ($: EngineInterface, url: string, list: Draft[], quiet = false): Promise<string> => {
   if (!url) return 'no phone page yet'
   // a new page starts empty, so the record of what was sent counts only for the page it was sent to
   const synced = ((await $.store.get('syncedUrl')) === url ? ((await $.store.get('synced')) ?? {}) : {}) as Record<string, number>
@@ -160,10 +160,14 @@ const syncPhone = async ($: EngineInterface, url: string, list: Draft[]): Promis
     ...changed.map(d => ({ op: 'set' as const, collection: 'drafts', doc_id: docId(d.name, now), data: { name: d.name, md: d.text, savedAt: d.mtimeMs } })),
     ...gone.map(name => ({ op: 'set' as const, collection: 'drafts', doc_id: docId(name, now), data: { name, deleted: true, savedAt: now } })),
   ]
-  const r = await $.tool.call({ tool: 'ArtifactData', action: 'batch', url, writes })
+  // A session can run without the artifact tools (seen with Remote Control on), and the call
+  // then throws; another session's idle push sends the draft instead (startSlackDrafts).
+  const r = await $.tool
+    .call({ tool: 'ArtifactData', action: 'batch', url, writes })
+    .catch((e: unknown) => ({ deny: `this session can't reach artifacts (${e instanceof Error ? e.message : String(e)})` }))
   if (r.deny !== undefined || r.isError) {
     const why = (r.deny ?? r.text ?? 'no reason given').slice(0, 160)
-    $.ui.toast(`Phone sync failed: ${why}`)
+    if (!quiet) $.ui.toast(`Phone sync failed: ${why}`)
     return `phone sync failed: ${why}`
   }
   const next = Object.fromEntries(list.map(d => [d.name, d.mtimeMs]))
@@ -210,6 +214,10 @@ const startSlackDrafts = async ($: EngineInterface, phone: () => string, sentDay
   // ponytail: a 30s read of the phone page's tombstones (core decides it here, see
   // pullPhoneDeletes; the tool.call hook reads them too); a push if the db ever offers one to a mod
   $.clock.every(PULL_MS, () => void pullPhoneDeletes($, phone(), true, idleSync).catch(() => undefined))
+  // With idleSync, the same tick pushes drafts no session has sent yet, so a draft saved in a
+  // session that can't reach artifacts reaches the phone through any other session open on the
+  // Mac. The record of what was sent is shared, so the first session to manage it stops the rest.
+  if (idleSync) $.clock.every(PULL_MS, () => void refresh($).then(list => syncPhone($, phone(), list, true)).catch(() => undefined))
 }
 
 // ── first run: point a new install at /vault-init ──
@@ -355,6 +363,7 @@ export const register: Register = (on, options) => {
   })
 
   // With no phone page set, or one that no longer opens, Claude publishes a new one.
+  // The .catch answers when anything else fails, so the command never goes unanswered.
   on('command.run', { command: 'slack-drafts' }, async $ => {
     phoneUrl = await followMoves($, phoneUrl)
     const pulled = await pullPhoneDeletes($, phoneUrl, false).catch(() => undefined)
@@ -372,6 +381,9 @@ export const register: Register = (on, options) => {
       return { text: `${count}; ${phoneUrl === '' ? 'no phone page yet' : 'the phone page no longer opens'}, so Claude is publishing one.` }
     }
     return { text: `${count}, ${await syncPhone($, phoneUrl, list)}.` }
+  }).catch(async $ => {
+    const list = await refresh($).catch(() => [])
+    return { text: `${list.length} draft${list.length === 1 ? '' : 's'} in ~/Desktop/slack-drafts; the pane or the phone page could not be updated from this session.` }
   })
 
   // The one unmatched tool.call hook the engine allows, for both mods. The pet:
@@ -419,6 +431,27 @@ export const register: Register = (on, options) => {
     await syncPhone($, phoneUrl, list)
     return ran
   }).catch(($, e, next) => next(e)) // never block a tool call; next replays its result
+
+  // On the phone (the mobile app, a Remote Control session), a draft shows as a card under the
+  // Write that saved it, so it can be read there even when the phone page can't be synced.
+  on('ui.render', { component: 'ToolUse', props: { tool: 'Write' } }, async ($, e, next) => {
+    const row = await next(e)
+    if (e.surface !== 'mobile' || e.props.isErrored) return row
+    const { file_path, content } = (e.props.input ?? {}) as { file_path?: unknown; content?: unknown }
+    const dir = await dirOf($)
+    const path = String(file_path ?? '')
+    if (typeof content !== 'string' || !path.startsWith(`${dir}/`) || path.slice(dir.length + 1).includes('/') || !path.endsWith('.md')) return row
+    const { Box, Text, Markdown } = $.ui.resolve(e)
+    const { body, where } = splitDraft(content)
+    return (
+      <Box flexDirection="column" borderStyle="round" paddingX={1} gap={1}>
+        {row}
+        <Text dimColor>{`Slack draft for ${labelOf(path.split('/').pop() ?? '').who}`}</Text>
+        {where !== '' && <Markdown text={where} dimColor />}
+        <Markdown text={body} />
+      </Box>
+    )
+  })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Button, Link, Markdown } = $.ui.resolve(e)
