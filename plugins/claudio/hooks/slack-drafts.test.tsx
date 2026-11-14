@@ -276,12 +276,16 @@ test('with idleSync, an idle poll picks up a Sent tap from the phone page', { op
     return { value: ok }
   })
   on('ui.toast', () => ({ value: undefined }))
-  on('tool.check', () => ({ decision: 'ask' as const })) // what core answers for any ArtifactData call
-  // stands in for the README's settings hook, which approves only this page's reads and syncs
-  on('classic.PreToolUse', ($, e) => {
-    const input = e.tool_input as { url?: string; action?: string }
-    return e.tool_name === 'ArtifactData' && input.url === 'https://claude.ai/artifact/x' && ['query', 'batch'].includes(String(input.action)) ? { allow: true as const } : {}
+  // core answers ask for any ArtifactData call, unless a PreToolUse hook settled it
+  on('tool.check', async ($, e, next) => {
+    const settled = await next(e)
+    return settled.hook === 'PreToolUse' ? settled : { decision: 'ask' as const }
   })
+  // stands in for the README's settings hook, which approves only this page's reads and syncs
+  // a mod's classic.PreToolUse hook gets tool.call's envelope (e.tool, the input's fields flat)
+  on('classic.PreToolUse', ($, e) =>
+    e.tool === 'ArtifactData' && e.url === 'https://claude.ai/artifact/x' && ['query', 'batch'].includes(e.action) ? { allow: true as const } : {},
+  )
   on('tool.call', () => ({ result: {}, text: `1 document:\n=== BEGIN ===\n${rows.map(r => JSON.stringify(r)).join('\n')}\n=== END ===` }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('session.start', () => ({ cwd: '/Users/test' }))
@@ -332,6 +336,7 @@ test('/slack-drafts asks Claude to republish a phone page that no longer opens, 
     return { value: e.value }
   })
   on('tool.call', ($, e) => {
+    if (e.tool === 'ArtifactComments') calls.push(`watch ${e.url} ${e.on}`)
     if (e.tool !== 'ArtifactData') return { result: {}, text: 'Published /tmp/pad/slack-drafts-phone/index.html at https://claude.ai/artifact/NEW1 (Version 1, version id 1)' }
     calls.push(`${e.action} ${e.url}`)
     return e.url.endsWith('/old')
@@ -352,6 +357,8 @@ test('/slack-drafts asks Claude to republish a phone page that no longer opens, 
   await $.tool.call({ tool: 'Artifact', action: 'publish', file_path: '/tmp/pad/slack-drafts-phone/index.html' })
   expect(saved).toEqual([['claudio.phoneUrl', 'https://claude.ai/artifact/NEW1']])
   expect(calls).toContain('batch https://claude.ai/artifact/NEW1')
+  // the publish's comment watch is stopped, so a resumed session has none to report
+  expect(calls).toContain('watch https://claude.ai/artifact/NEW1 false')
 })
 
 test('/slack-drafts publishes a phone page where none is set', async ($, on) => {
@@ -435,6 +442,29 @@ test('a session still holding a replaced link follows the new page instead of pu
   expect(prompts).toEqual([])
   expect(calls).toContain('batch https://claude.ai/artifact/NEW1')
   expect(calls.some(c => c.endsWith('/old'))).toBe(false)
+})
+
+test('a start re-saves a setting still holding a replaced link, and toasts when it cannot', { options: { phoneUrl: 'https://claude.ai/artifact/old' } }, async ($, on) => {
+  mock.store(on, { phoneMoves: { 'https://claude.ai/artifact/old': 'https://claude.ai/artifact/NEW1' } })
+  mock.clock(on)
+  const saved: unknown[] = []
+  const toasts: string[] = []
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', () => ({ value: [] }))
+  on('ui.toast', ($, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
+  on('config.set', ($, e) => {
+    saved.push(e.value)
+    return { deny: 'refused by a test' }
+  })
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  expect(saved).toEqual(['https://claude.ai/artifact/NEW1'])
+  expect(toasts.some(t => t.includes('NEW1') && t.includes('refused by a test'))).toBe(true)
 })
 
 test('/slack-drafts still answers in a session that cannot reach artifacts', { options: { phoneUrl: 'https://claude.ai/artifact/x' } }, async ($, on) => {

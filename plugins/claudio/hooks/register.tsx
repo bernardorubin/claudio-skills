@@ -198,6 +198,20 @@ const followMoves = async ($: EngineInterface, url: string) => {
   return url
 }
 
+// Saves the phoneUrl option; resolves why it could not, or undefined once written.
+const saveLink = async ($: EngineInterface, url: string) =>
+  (await $.config.set({ key: `${$.plugin.name}.phoneUrl`, value: url }).catch((e: unknown) => ({ deny: e instanceof Error ? e.message : String(e) }))).deny
+
+// The setting can lag the page (one republish's save never landed, leaving it on a deleted page
+// that write-slack-message handed out as the phone link), so each start re-saves where the moves lead.
+const healLink = async ($: EngineInterface, url: string) => {
+  const live = await followMoves($, url)
+  if (live === url) return url
+  const why = await saveLink($, live)
+  if (why !== undefined) $.ui.toast(`claudio: the phone page moved to ${live}, but the setting still holds the old link: ${why}`, { timeoutMs: 15_000 })
+  return live
+}
+
 // "Published <file> at <url> (Version 1, ...)": the link of a publish of the phone page, or null.
 const PUBLISHED = /^Published .* at (https:\/\/claude\.ai\/\S*artifact\/[\w-]+)/
 const publishedPhoneUrl = (filePath: unknown, text: string | undefined) =>
@@ -337,6 +351,7 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     const ran = await next(e)
+    phoneUrl = await healLink($, phoneUrl).catch(() => phoneUrl)
     // one mod failing to start must not keep the others from starting
     const failed = (
       await Promise.allSettled([
@@ -423,8 +438,11 @@ export const register: Register = (on, options) => {
     if (published !== null && published !== phoneUrl) {
       await $.store.set('phoneMoves', { ...(((await $.store.get('phoneMoves')) ?? {}) as Record<string, string>), [phoneUrl]: published })
       phoneUrl = published
-      const saved = await $.config.set({ key: `${$.plugin.name}.phoneUrl`, value: published })
-      $.ui.toast(saved.deny === undefined ? 'New phone page saved; drafts go there now' : `Could not save the new phone page link: ${saved.deny}`)
+      // A publish arms a comment watch in this session. The page needs none, and a session
+      // resumed without the artifact tools reports every watch it can't resume.
+      await $.tool.call({ tool: 'ArtifactComments', action: 'watch', url: published, on: false }).catch(() => undefined)
+      const why = await saveLink($, published)
+      $.ui.toast(why === undefined ? 'New phone page saved; drafts go there now' : `Could not save the new phone page link: ${why}`)
     }
     const list = await refresh($)
     if ((list[0]?.mtimeMs ?? 0) > newest) void open($, false)
