@@ -27,7 +27,7 @@ kc() { security find-generic-password -s claudio-slack-drafts-mobile -a "$1" -w;
 
 1. `command -v vercel`: when it's missing, tell the user to run `pnpm i -g vercel` and stop.
 2. `vercel whoami`: when it isn't logged in, ask the user to run `vercel login` in a terminal (it opens a browser), then continue. Then `vercel teams ls`, and keep the slug of the "<username>'s projects" team as `SCOPE`.
-3. `kc url 2>/dev/null`: when a link already exists, run **Check** (section 6) first. When it answers 200 and no argument was given, report it and stop, since there's nothing to set up.
+3. `kc url 2>/dev/null`: when a link already exists, run **Check** (section 6) first. When it answers 200 and no argument was given, report it and stop, since there's nothing to set up. With `pair`, go straight to section 5; with `--rotate`, to section 3.
 
 ## 2. Project and store
 
@@ -58,16 +58,19 @@ security add-generic-password -U -s claudio-slack-drafts-mobile -a url -w "https
 ## 5. Pair the phone
 
 ```bash
-open "$(kc url)/#pair=$(kc token)"
+kc token | sed 's/^/Authorization: Bearer /' | curl -s -X POST -H @- "$(kc url)/api/drafts?action=pair-start"
 ```
 
-That page on the Mac asks the store for a six-digit code (good once, for five minutes) and shows it. Tell the user, with the link clickable: open `https://<domain>` on the phone, type the code, then Share, Add to Home Screen. The `pair` argument runs this section alone, for a new phone or after `--rotate`.
+It answers `{"code":"123456","expiresIn":300}`: a six-digit code, good once, for five minutes. The token goes in through stdin, so it never reaches a URL or the chat. Give the user the code in the chat (it's fine to show; it is not the token), so they can pair from wherever they are, a Remote Control session on the phone included. Tell them, with the link clickable: open `https://<domain>` in Safari on the phone, tap Share, Add to Home Screen, open Slack Drafts from the home screen, and type the code there. Order matters: the home-screen app keeps its own storage, so a sign-in made in Safari doesn't carry over. The `pair` argument runs this section alone, for a new phone or after `--rotate`.
 
 ## 6. Check
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $(kc token)" "$(kc url)/api/drafts"
+code=$(kc token | sed 's/^/Authorization: Bearer /' | curl -s -o "$TMPDIR/sdm-check" -w '%{http_code}' -H @- "$(kc url)/api/drafts")
+echo "$code"; [ "$code" = 200 ] || head -c 300 "$TMPDIR/sdm-check"
 ```
+
+The body is shown only when the status isn't 200, so drafts never print; read it to pick the case below.
 
 - `200`: working. The mod picks up a new link or token within a minute, no reload needed.
 - `401`: the keychain and Vercel disagree. Run section 3 with `--rotate`, then 4 and 5.

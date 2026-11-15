@@ -16,7 +16,7 @@ The skill needs the Vercel CLI (`pnpm i -g vercel`) and a Vercel login. On your 
 1. Creates a project and a free Upstash Redis store. Adding the store asks you to accept Upstash's Marketplace terms once.
 2. Makes a token, keeps it in the macOS keychain, and sets it on the project.
 3. Deploys the page.
-4. Opens a pairing page on the Mac with a six-digit code. Open the page on your phone, type the code, and add it to your home screen.
+4. Gives you a six-digit code in the chat. On the phone, open the page in Safari, tap Share, Add to Home Screen, open it from the home screen, and type the code there (the home-screen app keeps its own sign-in, apart from Safari's).
 
 Run it again to check the setup, `/slack-drafts-mobile pair` for another phone, and `/slack-drafts-mobile --rotate` for a new token (phones then pair again).
 
@@ -32,5 +32,5 @@ The page never reaches the Mac: a tap only marks the draft, and the mod moves th
 ## Developing
 
 - Mod: `hooks/register.tsx`. Check it with `claude plugin validate .` and `claude plugin test .` from this folder.
-- Page backend: `app/api/drafts.ts`. Test it with `node --test app/check-drafts.ts`.
+- Page backend: `app/api/drafts.ts`. Test it with `node --test app/check-drafts.ts` (Node 22.18+; 22.6 to 22.17 need `--experimental-strip-types`).
 - Page: `app/public/index.html`. Its `slack-html.js` is the same bundle as claudio's `slack-drafts-phone/slack-html.js` (built from `plugins/claudio/hooks/slack-html.ts`).

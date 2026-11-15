@@ -24,14 +24,19 @@ const secret = async ($: EngineInterface, account: 'url' | 'token') => {
   return r?.exitCode === 0 ? r.stdout.trim() : ''
 }
 
-const readLink = async ($: EngineInterface): Promise<Link | null> => {
-  const [url, token] = await Promise.all([secret($, 'url'), secret($, 'token')])
-  return /^https:\/\/[^\s/]+$/.test(url) && token !== '' ? { url, token } : null
+const readLink = async ($: EngineInterface, s: Sync): Promise<Link | null> => {
+  const [raw, token] = await Promise.all([secret($, 'url'), secret($, 'token')])
+  const url = raw.replace(/\/+$/, '')
+  if (/^https:\/\/[^\s/]+$/.test(url) && token !== '') return { url, token }
+  if (raw !== '' || token !== '') warn($, s, 'the keychain holds half a link or a URL that is not https://. Run /slack-drafts-mobile.')
+  return null
 }
 
-const listFiles = async ($: EngineInterface): Promise<File[]> => {
+// null when the folder can't be read: a tick then skips, rather than reading it as empty and deleting every row on the page
+const listFiles = async ($: EngineInterface): Promise<File[] | null> => {
   const dir = await dirOf($)
-  const entries = await $.fs.list(dir).catch(() => [])
+  const entries = await $.fs.list(dir).catch(() => null)
+  if (entries === null) return null
   return entries
     .filter(f => f.kind === 'file' && f.name.endsWith('.md'))
     .map(f => ({ name: f.name, path: `${dir}/${f.name}`, mtimeMs: f.mtimeMs }))
@@ -58,10 +63,10 @@ const pushedOf = async ($: EngineInterface) => ((await $.store.get('pushed')) ??
 // The session's own state: the link it read, whether a tick is running, the warnings it gave.
 type Sync = { link: Link | null; busy: boolean; warned: Set<string> }
 
-// one toast per kind per session, never a block on anything
-const warn = ($: EngineInterface, s: Sync, text: string) => {
-  if (s.warned.has(text)) return
-  s.warned.add(text)
+// one toast per kind per session (the text, unless a kind is given), never a block on anything
+const warn = ($: EngineInterface, s: Sync, text: string, kind = text) => {
+  if (s.warned.has(kind)) return
+  s.warned.add(kind)
   $.ui.toast(`slack-drafts-mobile: ${text}`, { timeoutMs: 15_000 })
 }
 
@@ -78,13 +83,15 @@ const call = async ($: EngineInterface, s: Sync, l: Link, method: string, query:
     s.link = null
     warn($, s, 'the phone page refused this Mac. Run /slack-drafts-mobile to set it up again.')
   } else if (!r.ok && r.status !== 400) {
-    warn($, s, `the phone page could not be reached (${r.status === 0 ? r.text : `HTTP ${r.status}`}). Drafts stay on the Mac and sync once it answers.`)
+    const why = r.status === 0 ? r.text : `HTTP ${r.status} ${r.text.slice(0, 120)}`
+    warn($, s, `the phone page failed (${why}). Drafts stay on the Mac and sync once it answers.`, 'failed')
   }
   return r
 }
 
 const push = async ($: EngineInterface, s: Sync, l: Link) => {
   const files = await listFiles($)
+  if (files === null) return
   const pushed = await pushedOf($)
   const changed = files.filter(f => pushed[f.name] !== f.mtimeMs)
   const gone = Object.keys(pushed).filter(name => !files.some(f => f.name === name))
@@ -121,6 +128,7 @@ const pull = async ($: EngineInterface, s: Sync, l: Link) => {
   }
   if (rows.length === 0) return
   const files = await listFiles($)
+  if (files === null) return
   const next = { ...(await pushedOf($)) }
   let sent = 0
   let trashed = 0
@@ -130,7 +138,11 @@ const pull = async ($: EngineInterface, s: Sync, l: Link) => {
     if (f && f.mtimeMs > row.actedAt) continue
     if (f) {
       const moved = row.state === 'sent' ? await moveToSent($, f) : await moveToTrash($, f)
-      if (moved.exitCode !== 0) continue
+      if (moved.exitCode !== 0) {
+        // the row stays marked, so the next pull tries again
+        warn($, s, `could not move ${f.name} after the phone's tap (${moved.stderr.trim().slice(0, 120) || `exit ${moved.exitCode}`}).`)
+        continue
+      }
       if (row.state === 'sent') sent++
       else trashed++
     }
@@ -154,8 +166,9 @@ const tick = async ($: EngineInterface, s: Sync, kind: 'push' | 'pull') => {
   }
 }
 
+// read every minute, so a session picks up a rotated token or a new link
 const checkLink = async ($: EngineInterface, s: Sync) => {
-  if (s.link === null) s.link = await readLink($)
+  s.link = await readLink($, s)
 }
 
 export const register: Register = on => {

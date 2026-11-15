@@ -115,18 +115,19 @@ export function DELETE(req: Request) {
   })
 }
 
-// ?action=sent|delete&name= (a tap), ?action=pair-start (the Mac asks for a code),
+// ?action=sent|delete&name= (a tap), ?action=pair-start (the setup skill asks for a code),
 // ?action=pair with { code } (the phone trades the code for the token; the one unauthenticated route).
 export function POST(req: Request) {
   return handle(req, async () => {
     const action = new URL(req.url).searchParams.get('action') ?? ''
     if (action === 'pair') {
+      // the window is made before counting, so a failed call can't leave a counter that never expires
+      await redis('SET', 'pairtries', 0, 'EX', PAIR_SECONDS, 'NX')
       const tries = Number(await redis('INCR', 'pairtries'))
-      if (tries === 1) await redis('EXPIRE', 'pairtries', PAIR_SECONDS)
       if (tries > PAIR_TRIES) return json({ error: 'too many tries; wait five minutes' }, 429)
       const body = (await req.json().catch(() => null)) as { code?: unknown } | null
       const code = String(body?.code ?? '').replace(/\D/g, '')
-      if (code.length !== 6 || (await redis('GETDEL', `pair:${code}`)) === null) return json({ error: 'wrong or expired code' }, 403)
+      if (code.length !== 6 || (await redis('GETDEL', `pair:${code}`)) !== '1') return json({ error: 'wrong or expired code' }, 403)
       return json({ token: process.env.DRAFTS_TOKEN })
     }
     const denied = guard(req)
@@ -134,6 +135,8 @@ export function POST(req: Request) {
     if (action === 'pair-start') {
       const code = String((crypto.getRandomValues(new Uint32Array(1))[0] ?? 0) % 1_000_000).padStart(6, '0')
       await redis('SET', `pair:${code}`, '1', 'EX', PAIR_SECONDS)
+      // the owner asking for a code clears tries someone else used up
+      await redis('DEL', 'pairtries')
       return json({ code, expiresIn: PAIR_SECONDS })
     }
     const name = nameOf(req)

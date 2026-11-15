@@ -1,6 +1,6 @@
 # claudio-skills repo (the claudio marketplace)
 
-This repo is a Claude Code **plugin marketplace**. It is not application code — there is no build, no test runner, and no package manager. Everything here is JSON manifests + markdown skill definitions consumed by the Claude Code harness.
+This repo is a Claude Code **plugin marketplace**. It is mostly not application code: JSON manifests + markdown skill definitions consumed by the Claude Code harness, plus the mods' hooks modules. The one exception is `plugins/slack-drafts-mobile/app/`, a small Vercel app with its own `package.json` and `node --test` tests.
 
 ## Repo layout
 
@@ -9,7 +9,8 @@ claudio-skills/                       # repo folder; the plugin inside is named 
 ├── .claude-plugin/
 │   └── marketplace.json              # marketplace manifest — lists every plugin
 ├── plugins/
-│   └── claudio/                       # the one plugin (see below)
+│   ├── slack-drafts-mobile/           # optional plugin: a mod, its setup skill and a Vercel app (app/)
+│   └── claudio/                       # the main plugin (see below)
 │       ├── .claude-plugin/
 │       │   └── plugin.json           # plugin manifest
 │       ├── skills/                   # skill folders, each with SKILL.md
@@ -98,6 +99,7 @@ The agent becomes invocable via the Task tool as `subagent_type: claudio:<name>`
    ```bash
    python3 -c "import json; json.load(open('.claude-plugin/marketplace.json'))"
    python3 -c "import json; json.load(open('plugins/claudio/.claude-plugin/plugin.json'))"
+   python3 -c "import json; json.load(open('plugins/slack-drafts-mobile/.claude-plugin/plugin.json'))"
    ```
 2. Commit + push to `main`.
 3. On any machine that already has the marketplace: `/plugin marketplace update claudio` → `/plugin install claudio@claudio` to pull updates.

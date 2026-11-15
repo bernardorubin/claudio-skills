@@ -267,9 +267,10 @@ security find-generic-password -s claudio-slack-drafts-mobile -a url -w 2>/dev/n
   || cat ~/.config/claudio/slack-drafts-phone-url 2>/dev/null
 ```
 
-Empty means no phone page is set up: say the draft is saved and that
-`/slack-drafts-mobile` sets one up. The page only receives drafts saved in folder
-mode.
+Empty means no phone page is known yet: say the draft is saved and that
+`/slack-drafts` finds or publishes the artifact page (with the optional
+`slack-drafts-mobile` plugin installed, `/slack-drafts-mobile` sets up its Vercel
+page instead). The page only receives drafts saved in folder mode.
 
 ### Knowing what was sent
 

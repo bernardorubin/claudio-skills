@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="/icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;0,900;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;0,900;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" media="print" onload="this.media='all'">
 <style>
   /* One phone-width column; each draft reads like a Slack message (avatar, name and time, the message under the name), its actions full width below. */
   :root {
@@ -110,7 +110,6 @@
   .pair input { font: 700 1.25rem/1 var(--mono); letter-spacing: 0.2em; min-height: 44px; padding: 0 12px; flex: 1 1 auto; min-width: 0;
     border: 1px solid var(--rule); border-radius: 8px; background: var(--bg); color: var(--fg); }
   .pair input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-  .code { font: 700 2.5rem/1 var(--mono); letter-spacing: 0.25em; color: var(--accent); }
 
   @media (prefers-reduced-motion: no-preference) {
     .draft { transition: border-color 0.2s; }
@@ -190,7 +189,7 @@
   };
 
   const say = (el, ok, text) => { el.textContent = text; el.className = 'status ' + (ok ? 'ok' : 'err'); };
-  const why = e => (e && (e.code || e.name || e.message)) || 'unknown error';
+  const why = e => (e && (e.message || e.name)) || 'unknown error';
   const clock = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
   // The button says Copied for HOLD_MS, then the line under it keeps saying when.
@@ -265,7 +264,7 @@
       const done = async sent => {
         try {
           const r = await api('POST', '?action=' + (sent ? 'sent' : 'delete') + '&name=' + encodeURIComponent(d.name));
-          if (!r.ok) throw new Error('the page answered ' + r.status);
+          if (!r.ok) throw new Error('HTTP ' + r.status);
           drafts = drafts.filter(x => x.name !== d.name);
           drawn = null;
           render();
@@ -286,8 +285,8 @@
     }
   };
 
-  // The token lives in this browser only. A phone gets it by trading the
-  // six-digit code the Mac shows; the Mac's pairing page never keeps it.
+  // The token lives in this browser only: a phone gets it by trading the six-digit
+  // code /slack-drafts-mobile pair shows. A home-screen app keeps its own storage, apart from Safari's.
   const TOKEN_KEY = 'slackDraftsToken';
   let token = localStorage.getItem(TOKEN_KEY) || '';
   const api = (method, query = '', body) => fetch('/api/drafts' + query, {
@@ -308,8 +307,10 @@
   };
 
   const showPairForm = note => {
-    lede.textContent = 'Sign this phone in once with the code your Mac shows.';
-    const box = panel('Enter the code from your Mac', note || 'Run /slack-drafts-mobile in Claude Code on your Mac to show a six-digit code.');
+    const app = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+    lede.textContent = app ? 'Sign this phone in once with a code from Claude Code.'
+      : 'Add this page to your Home Screen first (Share, Add to Home Screen), open it from there, then enter the code. A sign-in here in Safari does not carry over.';
+    const box = panel('Enter your code', note || 'Run /slack-drafts-mobile pair in Claude Code for a six-digit code.');
     const form = document.createElement('form');
     const input = document.createElement('input');
     Object.assign(input, { inputMode: 'numeric', autocomplete: 'one-time-code', maxLength: 6, placeholder: '000000', required: true });
@@ -335,21 +336,6 @@
     input.focus();
   };
 
-  // On the Mac: show a fresh code for the phone. The token came in the link's fragment and is used for this one request.
-  const showMacCode = async macToken => {
-    lede.textContent = 'Pair your phone with this page.';
-    try {
-      const r = await fetch('/api/drafts?action=pair-start', { method: 'POST', headers: { Authorization: 'Bearer ' + macToken } });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.code) throw new Error(j.error || 'the page answered ' + r.status);
-      const box = panel('Your code', 'On your phone, open ' + location.origin + ' and enter this code. It works once, for five minutes.');
-      const code = document.createElement('div'); code.className = 'code'; code.textContent = j.code;
-      box.insertBefore(code, box.lastChild);
-    } catch (e) {
-      panel('Could not make a code', 'The page answered: ' + why(e) + '. Run /slack-drafts-mobile again.');
-    }
-  };
-
   const load = async () => {
     if (!token) return showPairForm();
     try {
@@ -357,33 +343,33 @@
       if (r.status === 401) {
         token = '';
         localStorage.removeItem(TOKEN_KEY);
-        return showPairForm('This phone was signed out, maybe after a new token. Run /slack-drafts-mobile on your Mac for a new code.');
+        return showPairForm('This phone was signed out, maybe after a new token. Run /slack-drafts-mobile pair in Claude Code for a new code.');
       }
-      if (!r.ok) throw new Error('the page answered ' + r.status);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
       const rows = (await r.json()).drafts || [];
       const live = rows.filter(x => x && x.state === 'open' && typeof x.name === 'string')
         .map(x => ({ name: x.name, md: String(x.md || ''), savedAt: x.savedAt || 0 }))
         .sort((a, b) => b.savedAt - a.savedAt);
       const key = live.map(d => d.name + '@' + d.savedAt + '#' + d.md.length).join('|');
-      if (key !== drawn) {
+      if (key !== drawn || lede.dataset.stale) {
+        delete lede.dataset.stale;
         drawn = key;
         drafts = live;
         render();
       }
     } catch (e) {
-      drawn = null;
-      showEmpty('Could not load drafts', 'The page answered: ' + why(e) + '. It tries again in a few seconds.');
+      // a dropped refresh keeps the cards on screen; only an empty page shows the error box
+      if (!list.querySelector('.draft')) {
+        drawn = null;
+        return showEmpty('Could not load drafts', 'The page answered: ' + why(e) + '. It tries again in a few seconds.');
+      }
+      lede.dataset.stale = '1';
+      lede.textContent = 'Could not refresh (' + why(e) + '), so this list may be out of date. It tries again in a few seconds.';
     }
   };
 
-  const frag = new URLSearchParams(location.hash.slice(1));
-  if (location.hash) history.replaceState(null, '', location.pathname);
-  if (frag.get('pair')) {
-    showMacCode(frag.get('pair'));
-  } else {
-    load();
-    // ponytail: a 15 s refresh while the page is in view, and one on every return to it
-    setInterval(() => { if (document.visibilityState === 'visible' && token) load(); }, 15000);
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && token) load(); });
-  }
+  load();
+  // ponytail: a 15 s refresh while the page is in view, and one on every return to it
+  setInterval(() => { if (document.visibilityState === 'visible' && token) load(); }, 15000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && token) load(); });
 </script>

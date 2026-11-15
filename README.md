@@ -4,7 +4,7 @@
 
 <h1 align="center">claudio</h1>
 
-A Claude Code plugin marketplace by Bernardo Rubin. One plugin (`claudio`) bundles everything: the skills, with no command/skill prefixes to type, plus two mods, a usage band above the prompt and a Slack drafts pane.
+A Claude Code plugin marketplace by Bernardo Rubin. One plugin (`claudio`) bundles everything: the skills, with no command/skill prefixes to type, plus two mods, a usage band above the prompt and a Slack drafts pane. A second, optional plugin (`slack-drafts-mobile`) puts those drafts on a phone page on your own Vercel account.
 
 ## Installation
 

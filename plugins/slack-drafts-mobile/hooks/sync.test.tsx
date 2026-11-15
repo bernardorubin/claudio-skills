@@ -21,21 +21,33 @@ const memStore = (on: On, entries: Record<string, unknown> = {}) => {
 }
 
 // A Mac with the keychain item (or without it), one drafts folder and a page that answers `reply`.
-const setup = (on: On, opts: { linked?: boolean; files?: () => { name: string; mtimeMs: number }[]; reply?: (c: Call) => { status: number; text: string } }) => {
+type Opts = {
+  linked?: boolean
+  token?: () => string
+  files?: () => { name: string; mtimeMs: number }[]
+  listFails?: boolean
+  mvFails?: boolean
+  reply?: (c: Call) => { status: number; text: string }
+}
+const setup = (on: On, opts: Opts) => {
   const runs: string[][] = []
   const calls: Call[] = []
   const toasts: string[] = []
   on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', ($, e) => ({
+  on('fs.list', ($, e) => {
+    if (opts.listFails) throw new Error('EACCES: permission denied')
+    return {
     value: e.path === DIR ? (opts.files?.() ?? []).map(f => ({ ...f, kind: 'file' as const, size: DRAFT.length, isLink: false })) : [],
-  }))
+  }
+  })
   on('fs.read', () => ({ value: DRAFT }))
   on('process.run', ($, e) => {
     if (e.argv[0] === 'security') {
       if (opts.linked === false) return { value: { ...ok, exitCode: 44, stderr: 'could not be found' } }
-      return { value: { ...ok, stdout: e.argv.includes('url') ? `${URL}\n` : 'tok\n' } }
+      return { value: { ...ok, stdout: e.argv.includes('url') ? `${URL}\n` : `${opts.token?.() ?? 'tok'}\n` } }
     }
     runs.push([...e.argv])
+    if (opts.mvFails && e.argv[0] === 'mv') return { value: { ...ok, exitCode: 1, stderr: 'mv: Operation not permitted' } }
     return { value: ok }
   })
   on('http.fetch', ($, e) => {
@@ -131,7 +143,7 @@ test('nothing pushed means no reads of the page', async ($, on) => {
   expect(calls.filter(c => c.method === 'GET')).toEqual([])
 })
 
-test('a refused token warns once and stops until the keychain changes', async ($, on) => {
+test('a refused token warns once and retries only after the next minute reads the keychain', async ($, on) => {
   const clock = mock.clock(on)
   memStore(on)
   const { calls, toasts } = setup(on, { files: () => [{ name: NAME, mtimeMs: 100 }], reply: () => ({ status: 401, text: '{"error":"unauthorized"}' }) })
@@ -139,5 +151,62 @@ test('a refused token warns once and stops until the keychain changes', async ($
   await clock.advance(3_000)
   await clock.advance(9_000)
   expect(calls.length).toBe(1)
+  await clock.advance(60_000)
+  expect(calls.length).toBe(2)
   expect(toasts.filter(t => t.includes('refused this Mac')).length).toBe(1)
+})
+
+test('a rotated token reaches a running session within a minute', async ($, on) => {
+  const clock = mock.clock(on)
+  memStore(on)
+  let token = 'old'
+  let files = [{ name: NAME, mtimeMs: 100 }]
+  const { calls } = setup(on, { token: () => token, files: () => files })
+  await $.session.start(SESSION)
+  await clock.advance(3_000)
+  token = 'new'
+  await clock.advance(60_000)
+  files = [{ name: NAME, mtimeMs: 200 }]
+  await clock.advance(3_000)
+  const puts = calls.filter(c => c.method === 'PUT')
+  expect(puts.map(c => c.auth)).toEqual(['Bearer old', 'Bearer new'])
+})
+
+test('a refused draft is pushed once, not every tick, and the toast names it', async ($, on) => {
+  const clock = mock.clock(on)
+  memStore(on)
+  const { calls, toasts } = setup(on, { files: () => [{ name: NAME, mtimeMs: 100 }], reply: c => ({ status: c.method === 'PUT' ? 400 : 200, text: c.method === 'PUT' ? '{"error":"bad draft"}' : '{"drafts":[]}' }) })
+  await $.session.start(SESSION)
+  await clock.advance(3_000)
+  await clock.advance(3_000)
+  await clock.advance(3_000)
+  expect(calls.filter(c => c.method === 'PUT').length).toBe(1)
+  expect(toasts.some(t => t.includes(NAME) && t.includes('bad draft'))).toBe(true)
+})
+
+test('a move that fails keeps the row on the page and says so', async ($, on) => {
+  const clock = mock.clock(on)
+  memStore(on, { pushed: { [NAME]: 100 } })
+  const { calls, toasts } = setup(on, {
+    mvFails: true,
+    files: () => [{ name: NAME, mtimeMs: 100 }],
+    reply: c => ({ status: 200, text: c.method === 'GET' ? JSON.stringify({ drafts: [{ name: NAME, state: 'sent', actedAt: 500 }] }) : '{}' }),
+  })
+  await $.session.start(SESSION)
+  await clock.advance(5_000)
+  await clock.advance(1_000)
+  expect(calls.some(c => c.method === 'DELETE')).toBe(false)
+  expect(toasts.some(t => t.includes(`could not move ${NAME}`))).toBe(true)
+})
+
+test('an unreadable folder deletes nothing from the page', async ($, on) => {
+  const clock = mock.clock(on)
+  memStore(on, { pushed: { [NAME]: 100 } })
+  const { calls } = setup(on, {
+    listFails: true,
+    reply: c => ({ status: 200, text: c.method === 'GET' ? JSON.stringify({ drafts: [{ name: NAME, state: 'sent', actedAt: 500 }] }) : '{}' }),
+  })
+  await $.session.start(SESSION)
+  await clock.advance(15_000)
+  expect(calls.some(c => c.method === 'DELETE')).toBe(false)
 })
