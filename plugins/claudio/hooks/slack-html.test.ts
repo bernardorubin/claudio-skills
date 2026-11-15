@@ -7,7 +7,7 @@ test('converts the skill vocabulary to Slack HTML', async () => {
   expect(got).toContain('<a href="https://x.test">HPY-1</a>')
   expect(got).toContain('<code>a&lt;b</code>')
   expect(got).toContain('<ul><li>one</li><li>two</li></ul>')
-  expect(got).toContain('<pre><code>x=1</code></pre>')
+  expect(got).toContain('<pre>x=1</pre>')
   expect(toHtml('`[x](https://y.test)`')).not.toContain('<a')
   expect(toHtml('1. first\n\n2. second')).toBe('<ol><li>first</li><li>second</li></ol>')
   expect(toHtml('- a\n\n- b')).toBe('<ul><li>a</li><li>b</li></ul>')

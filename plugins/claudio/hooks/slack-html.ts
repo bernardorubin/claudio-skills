@@ -26,7 +26,8 @@ export const toHtml = (md: string) => {
     if (listTag) out.push(`</${listTag}>`)
     listTag = null
   }
-  const flushCode = () => out.push(`<pre><code>${escape(code.join('\n'))}</code></pre>`)
+  // no <code> inside the <pre>: iOS Slack pastes that as inline code on every line
+  const flushCode = () => out.push(`<pre>${escape(code.join('\n'))}</pre>`)
 
   for (const raw of md.split(/\r?\n/)) {
     const line = raw.trimEnd()

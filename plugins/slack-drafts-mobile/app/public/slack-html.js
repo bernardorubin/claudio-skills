@@ -43,7 +43,7 @@ var SlackHtml = (() => {
       if (listTag) out.push(`</${listTag}>`);
       listTag = null;
     };
-    const flushCode = () => out.push(`<pre><code>${escape(code.join("\n"))}</code></pre>`);
+    const flushCode = () => out.push(`<pre>${escape(code.join("\n"))}</pre>`);
     for (const raw of md.split(/\r?\n/)) {
       const line = raw.trimEnd();
       if (line.startsWith("```")) {
