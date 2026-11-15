@@ -50,6 +50,7 @@
   body { background: var(--bg); color: var(--fg); font: 16px/1.5 var(--body); padding-block: 20px 40px;
     padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   main { max-width: 600px; margin: 0 auto; display: grid; gap: 20px; }
+  [hidden] { display: none !important; } /* author display rules (button, .files, .where) beat the browser's own [hidden] */
   header { display: grid; gap: 4px; }
   h1 { font: 900 1.625rem/1.15 var(--body); margin: 0; text-wrap: balance; }
   .lede { margin: 0; color: var(--muted); font-size: 0.9375rem; }
@@ -101,14 +102,18 @@
   .empty strong { color: var(--fg); }
   code.inline { font: 0.86em var(--mono); background: var(--code-bg); color: var(--code-fg); padding: 1px 4px; border-radius: 3px; }
 
-  /* pairing: the Mac shows a six-digit code, the phone types it once */
+  /* sign-in: GitHub, or a six-digit code from the Mac */
   .pair { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 20px 16px; display: grid; gap: 12px; }
   .pair strong { font-size: 1.05rem; }
   .pair p { margin: 0; color: var(--muted); }
   .pair form { display: flex; gap: 8px; }
-  .pair input { font: 700 1.25rem/1 var(--mono); letter-spacing: 0.2em; min-height: 44px; padding: 0 12px; flex: 1 1 auto; min-width: 0;
+  .pair input { font: 700 1.25rem/1 var(--mono); letter-spacing: 0.2em; min-height: 44px; padding: 0 12px; flex: 1 1 auto; width: 0; min-width: 0;
     border: 1px solid var(--rule); border-radius: 8px; background: var(--bg); color: var(--fg); }
   .pair input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .pair form button { flex: none; }
+  .pair .or { font-size: 0.875rem; }
+  header .who-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  #signout { min-height: 32px; padding: 0 10px; font-size: 0.8125rem; }
 
   @media (prefers-reduced-motion: no-preference) {
     .draft { transition: border-color 0.2s; }
@@ -120,7 +125,7 @@
 
 <main>
   <header>
-    <h1>Slack Drafts</h1>
+    <div class="who-row"><h1>Slack Drafts</h1><button type="button" class="quiet" id="signout" hidden>Sign out</button></div>
     <p class="lede" id="lede">Drafts from <code class="inline">/write-slack-message</code>, ready to paste into Slack with links and code intact.</p>
   </header>
   <div class="list" id="list">
@@ -284,10 +289,33 @@
     }
   };
 
-  // The token lives in this browser only: a phone gets it by trading the six-digit
-  // code /slack-drafts-mobile pair shows. A home-screen app keeps its own storage, apart from Safari's.
+  // The token lives in this browser only. A browser gets it by signing in with the owner's GitHub
+  // account, or by trading the six-digit code /slack-drafts-mobile pair shows.
+  // A home-screen app keeps its own storage, apart from Safari's.
   const TOKEN_KEY = 'slackDraftsToken';
   let token = localStorage.getItem(TOKEN_KEY) || '';
+  const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  const signout = document.getElementById('signout');
+  const post = async (action, body) => {
+    const r = await fetch('/api/drafts?action=' + action, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'the page answered ' + r.status);
+    return j;
+  };
+  const signedIn = t => {
+    if (!t) throw new Error('the page sent no token');
+    token = t;
+    localStorage.setItem(TOKEN_KEY, token);
+    drawn = null;
+    load();
+  };
+  // On a borrowed computer: the token leaves this browser, nothing else changes.
+  signout.addEventListener('click', () => {
+    token = '';
+    localStorage.removeItem(TOKEN_KEY);
+    drawn = null;
+    showPairForm('Signed out of this browser.');
+  });
   const api = (method, query = '', body) => fetch('/api/drafts' + query, {
     method,
     cache: 'no-store',
@@ -307,9 +335,14 @@
 
   const showPairForm = note => {
     const app = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
-    lede.textContent = app ? 'Sign this phone in once with a code from Claude Code.'
-      : 'Add this page to your Home Screen first (Share, Add to Home Screen), open it from there, then enter the code. A sign-in here in Safari does not carry over.';
-    const box = panel('Enter your code', note || 'Run /slack-drafts-mobile pair in Claude Code for a six-digit code.');
+    signout.hidden = true;
+    lede.textContent = app || !IOS ? 'Sign in once on this device.'
+      : 'To keep it on your Home Screen, add it first (Share, Add to Home Screen) and sign in there: a sign-in here stays in Safari.';
+    const box = panel('Sign in', note || 'With your GitHub account, or a six-digit code from /slack-drafts-mobile pair in Claude Code.');
+    const gh = document.createElement('button'); gh.type = 'button'; gh.className = 'primary'; gh.textContent = 'Sign in with GitHub';
+    gh.addEventListener('click', () => location.assign('/api/github'));
+    const or = document.createElement('p'); or.className = 'or'; or.textContent = 'Or with a code:';
+    box.append(gh, or);
     const form = document.createElement('form');
     const input = document.createElement('input');
     Object.assign(input, { inputMode: 'numeric', autocomplete: 'one-time-code', maxLength: 6, placeholder: '000000', required: true });
@@ -321,18 +354,11 @@
     form.addEventListener('submit', async ev => {
       ev.preventDefault();
       try {
-        const r = await fetch('/api/drafts?action=pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: input.value }) });
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok || !j.token) throw new Error(j.error || 'the page answered ' + r.status);
-        token = j.token;
-        localStorage.setItem(TOKEN_KEY, token);
-        drawn = null;
-        load();
+        signedIn((await post('pair', { code: input.value })).token);
       } catch (e) {
         say(status, false, 'Could not sign in (' + why(e) + ').');
       }
     });
-    input.focus();
   };
 
   const load = async () => {
@@ -342,9 +368,10 @@
       if (r.status === 401) {
         token = '';
         localStorage.removeItem(TOKEN_KEY);
-        return showPairForm('This phone was signed out, maybe after a new token. Run /slack-drafts-mobile pair in Claude Code for a new code.');
+        return showPairForm('This browser was signed out, maybe after a new token. Sign in again.');
       }
       if (!r.ok) throw new Error('HTTP ' + r.status);
+      signout.hidden = false;
       const rows = (await r.json()).drafts || [];
       const live = rows.filter(x => x && x.state === 'open' && typeof x.name === 'string')
         .map(x => ({ name: x.name, md: String(x.md || ''), savedAt: x.savedAt || 0 }))
@@ -367,7 +394,19 @@
     }
   };
 
-  load();
+  // GitHub sends the browser back with a one-time handoff (or why it failed) in the fragment, never the token.
+  const GITHUB_ERRORS = {
+    'not-allowed': 'That GitHub account is not the owner of this page.',
+    expired: 'The GitHub sign-in took too long. Try again.',
+    cancelled: 'GitHub sign-in was cancelled.',
+    github: 'GitHub did not finish the sign-in. Try again.',
+    'not-set-up': 'GitHub sign-in is not set up yet: run /slack-drafts-mobile in Claude Code on the Mac.',
+  };
+  const back = /^#signin(-error)?=([\w-]+)$/.exec(location.hash);
+  if (back) history.replaceState(null, '', location.pathname + location.search);
+  if (back && !back[1]) post('signin', { once: back[2] }).then(j => signedIn(j.token)).catch(e => showPairForm('Could not sign in with GitHub (' + why(e) + ').'));
+  else if (back) showPairForm(GITHUB_ERRORS[back[2]] || 'GitHub sign-in did not work. Try again.');
+  else load();
   // ponytail: a 15 s refresh while the page is in view, and one on every return to it
   setInterval(() => { if (document.visibilityState === 'visible' && token) load(); }, 15000);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && token) load(); });
