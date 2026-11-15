@@ -4,7 +4,7 @@
 
 <h1 align="center">claudio</h1>
 
-A Claude Code plugin marketplace by Bernardo Rubin. One plugin (`claudio`) bundles everything: the skills, with no command/skill prefixes to type, plus two mods, a usage band above the prompt and a Slack drafts pane.
+A Claude Code plugin marketplace by Bernardo Rubin. One plugin (`claudio`) bundles everything: the skills, with no command/skill prefixes to type, plus two mods, a usage band above the prompt and a Slack drafts pane. A second, optional plugin (`slack-drafts-mobile`) puts those drafts on a phone page on your own Vercel account.
 
 ## Installation
 
@@ -77,6 +77,10 @@ Two function-hook mods ship inside `claudio`, so there is nothing extra to insta
 - **`/slack-drafts`**: a pane for the drafts `/write-slack-message` saves, with a copy button that keeps Slack links and code, and an optional private phone page to paste them from your iPhone.
 
 See [the plugin README's Mods section](plugins/claudio/README.md#mods) for the one-time phone setup.
+
+## slack-drafts-mobile (optional)
+
+A second plugin in this marketplace puts your drafts on a page on your own Vercel account, synced over plain HTTPS, so it works in every Claude Code session, Remote Control included. Install it with `/plugin install slack-drafts-mobile@claudio`, then run `/slack-drafts-mobile`. See [its README](plugins/slack-drafts-mobile/README.md).
 
 ## License
 
