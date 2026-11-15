@@ -104,20 +104,6 @@ const rowsOf = (text: string): Row[] =>
     }
   })
 
-// The drafts a page still shows: each name whose newest row is not a tombstone.
-// ponytail: one read of up to 1000 rows; the page deletes superseded rows itself, so that covers it
-const liveOn = async ($: EngineInterface, url: string) => {
-  const input = { action: 'query' as const, url, collection: 'drafts', query: { where: [['savedAt', '>=', 0]], limit: 1000 } }
-  const r = await $.tool.call({ tool: 'ArtifactData', ...input }).catch(() => null)
-  if (r === null || r.deny !== undefined || r.isError) return []
-  const newest = new Map<string, { at: number; deleted: boolean }>()
-  for (const row of rowsOf(r.text ?? '')) {
-    const at = Number(row.savedAt) || 0
-    if (at >= (newest.get(row.name)?.at ?? -1)) newest.set(row.name, { at, deleted: row.deleted === true })
-  }
-  return [...newest].filter(([, v]) => !v.deleted).map(([name]) => name)
-}
-
 // A delete or a Sent on the phone page adds a tombstone marked from: 'phone' (Sent
 // adds sent: true). The Mac trashes the file or moves it to sent/, and the tombstone
 // syncPhone then writes tells the page to tidy both away.
@@ -170,15 +156,15 @@ const docId = (name: string, at: number) =>
 // Returns what happened, for /slack-drafts to say; failures also toast unless `quiet` (the idle push).
 const syncPhone = async ($: EngineInterface, url: string, list: Draft[], quiet = false): Promise<string> => {
   if (!url) return 'no phone page yet'
-  // The record of what was sent counts only for the page it was sent to. Any other page (a new one,
-  // or an older one findPage adopted) is read for the drafts it still shows, so a draft sent or
-  // trashed since gets its tombstone instead of showing again as unsent.
-  const known = (await $.store.get('syncedUrl')) === url
-  const synced = (known ? ((await $.store.get('synced')) ?? {}) : {}) as Record<string, number>
-  const held = known ? Object.keys(synced) : await liveOn($, url)
+  // What this Mac sent, kept per page: a page it goes back to (one findPage adopted) gets tombstones
+  // for exactly the drafts it put there and sent or trashed since, and another Mac's drafts on a
+  // shared page are left alone. Before 4.26 the one record was for the page under syncedUrl.
+  const byPage = ((await $.store.get('syncedPages')) ?? {}) as Record<string, Record<string, number>>
+  const legacy = (await $.store.get('syncedUrl')) === url ? await $.store.get('synced') : undefined
+  const synced = (byPage[url] ?? legacy ?? {}) as Record<string, number>
   const now = Date.now()
   const changed = list.filter(d => synced[d.name] !== d.mtimeMs)
-  const gone = held.filter(name => !list.some(d => d.name === name))
+  const gone = Object.keys(synced).filter(name => !list.some(d => d.name === name))
   if (changed.length === 0 && gone.length === 0) return 'phone page up to date'
   const writes = [
     ...changed.map(d => ({ op: 'set' as const, collection: 'drafts', doc_id: docId(d.name, now), data: { name: d.name, md: d.text, savedAt: d.mtimeMs } })),
@@ -195,7 +181,7 @@ const syncPhone = async ($: EngineInterface, url: string, list: Draft[], quiet =
     return `phone sync failed: ${why}`
   }
   const next = Object.fromEntries(list.map(d => [d.name, d.mtimeMs]))
-  await $.store.set('synced', next)
+  await $.store.set('syncedPages', { ...byPage, [url]: next })
   await $.store.set('syncedUrl', url)
   return `sent ${writes.length} change${writes.length === 1 ? '' : 's'} to the phone page`
 }

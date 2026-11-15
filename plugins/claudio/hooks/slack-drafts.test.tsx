@@ -437,7 +437,8 @@ test('/slack-drafts publishes nothing when it could not look for a page', async 
 })
 
 test('a deleted page gives way to the pinned Slack Drafts page, whose handled drafts get tombstones', async ($, on) => {
-  const store = memStore(on, { phonePage: 'https://claude.ai/artifact/gone' })
+  // this Mac synced PIN before, when the jose draft was still open
+  const store = memStore(on, { phonePage: 'https://claude.ai/artifact/gone', syncedPages: { 'https://claude.ai/artifact/PIN': { 'jose-1101-0900.md': 5 } } })
   const clock = mock.clock(on)
   const prompts: string[] = []
   const batches: { url?: string; writes?: { data?: { name?: string; deleted?: boolean } }[] }[] = []
@@ -451,8 +452,6 @@ test('a deleted page gives way to the pinned Slack Drafts page, whose handled dr
     prompts.push(e.text)
     return { text: e.text }
   })
-  // the adopted page still shows a draft sent from the Mac since it was last synced
-  const stale = { id: 'jose-1101-0900-1', data: { name: 'jose-1101-0900.md', md: 'old', savedAt: 5 }, version: 1 }
   on('tool.call', ($, e) => {
     if (e.tool === 'Artifact' && e.action === 'list') {
       return {
@@ -465,7 +464,6 @@ test('a deleted page gives way to the pinned Slack Drafts page, whose handled dr
       }
     }
     if (e.tool === 'ArtifactData' && e.action === 'batch') batches.push({ url: e.url, writes: e.writes })
-    if (e.tool === 'ArtifactData' && e.action === 'query' && e.url?.endsWith('/PIN')) return { result: {}, text: `1 document:\n=== BEGIN ===\n${JSON.stringify(stale)}\n=== END ===` }
     return { result: {}, text: '0 documents' }
   })
   on('command.register', ($, e) => ({ value: { command: e.name } }))
