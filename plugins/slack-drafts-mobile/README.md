@@ -16,9 +16,10 @@ The skill needs the Vercel CLI (`pnpm i -g vercel`) and a Vercel login. On your 
 1. Creates a project and a free Upstash Redis store. Adding the store asks you to accept Upstash's Marketplace terms once.
 2. Makes a token, keeps it in the macOS keychain, and sets it on the project.
 3. Deploys the page.
-4. Gives you a six-digit code in the chat. On the phone, open the page in Safari, tap Share, Add to Home Screen, open it from the home screen, and type the code there (the home-screen app keeps its own sign-in, apart from Safari's).
+4. Sets up Sign in with GitHub: you make a GitHub OAuth app (a name, the page's link and the callback link the skill gives you) and paste its client secret into Vercel from your terminal, so it never goes through the chat. Only your GitHub account gets in, checked by its numeric id.
+5. On the phone, open the page in Safari, tap Share, Add to Home Screen, open it from the home screen, and tap Sign in with GitHub (the home-screen app keeps its own sign-in, apart from Safari's). Any other browser signs in the same way, and Sign out takes a borrowed one back out (sign out of GitHub there too). A six-digit code from `/slack-drafts-mobile pair` is the fallback.
 
-Run it again to check the setup (after a plugin update that changed the page, this also redeploys it; the phone stays paired), `/slack-drafts-mobile pair` for another phone, and `/slack-drafts-mobile --rotate` for a new token (phones then pair again).
+Run it again to check the setup (after a plugin update that changed the page, this also redeploys it; browsers stay signed in), `/slack-drafts-mobile pair` for a code, and `/slack-drafts-mobile --rotate` for a new token (every browser then signs in again).
 
 ## How it syncs
 
@@ -27,7 +28,7 @@ Run it again to check the setup (after a plugin update that changed the page, th
 - A Sent or delete tap moves the file within 15 s while Claude Code is open on the Mac. With no session open, the tap waits on the page and the file moves when a session starts.
 - The mod only reads the page while a draft it pushed is still there, so an empty page costs no requests.
 
-The page never reaches the Mac: a tap only marks the draft, and the mod moves the file. The token lives in the keychain (service `claudio-slack-drafts-mobile`), never in a plain file. macOS only.
+The page never reaches the Mac: a tap only marks the draft, and the mod moves the file. The token lives in the keychain (service `claudio-slack-drafts-mobile`), never in a plain file. A GitHub sign-in hands the browser a one-time, 60-second handoff that it trades for the token; the token itself never goes in a URL. macOS only.
 
 ## Developing
 

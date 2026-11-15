@@ -1,6 +1,7 @@
 // The whole backend of the phone page: the Mac's mod saves and cleans up drafts,
-// the page reads them and records Sent and delete taps for the mod to act on.
-// Storage is one Upstash Redis hash (`drafts`: file name -> Row), over its REST API.
+// the page reads them and records Sent and delete taps for the mod to act on, and a browser
+// signs in with the owner's GitHub account or a six-digit code from the Mac.
+// Storage is one Upstash Redis hash (`drafts`: file name -> Row) plus short-lived sign-in keys, over its REST API.
 // No Node types needed: Web Crypto and TextEncoder are globals in Vercel's runtime, and this is all of process it reads.
 declare const process: { env: Record<string, string | undefined> }
 
@@ -11,19 +12,23 @@ const NAME = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,120}\.md$/
 const MAX_MD = 64_000
 const PAIR_SECONDS = 300
 const PAIR_TRIES = 10
+const GITHUB_STATE_MS = 10 * 60_000
+const HANDOFF_SECONDS = 60
 
 const bytes = new TextEncoder()
 
 // Compares in constant time, so the response time says nothing about how much of a guess was right.
-export const authorized = (header: string | null, token: string | undefined) => {
-  if (!token || !header?.startsWith('Bearer ')) return false
-  const given = bytes.encode(header.slice(7))
-  const want = bytes.encode(token)
+const same = (a: string, b: string) => {
+  const given = bytes.encode(a)
+  const want = bytes.encode(b)
   if (given.length !== want.length) return false
   let diff = 0
   for (let i = 0; i < want.length; i++) diff |= (given[i] ?? 0) ^ (want[i] ?? 0)
   return diff === 0
 }
+
+export const authorized = (header: string | null, token: string | undefined) =>
+  !!token && !!header?.startsWith('Bearer ') && same(header.slice(7), token)
 
 // A save from the Mac. It never reopens a draft the phone acted on, unless the Mac saved it again after the tap.
 export const merge = (old: Row | undefined, name: string, md: string, savedAt: number): Row | null =>
@@ -46,6 +51,57 @@ const redis = async (...command: (string | number)[]): Promise<unknown> => {
 const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { 'cache-control': 'no-store' } })
 
+const redirect = (to: string) => new Response(null, { status: 302, headers: { location: to, 'cache-control': 'no-store' } })
+
+// ── GitHub sign-in: only the GitHub account GITHUB_USER_ID (its numeric id, which a rename can't take) gets in ──
+
+const b64u = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+
+const hmac = async (text: string) => {
+  const key = await crypto.subtle.importKey('raw', bytes.encode(process.env.GITHUB_CLIENT_SECRET ?? ''), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  return b64u(new Uint8Array(await crypto.subtle.sign('HMAC', key, bytes.encode(text))))
+}
+
+// The OAuth state is its own proof: when it was made, signed with the app's secret, so the round trip needs no store.
+export const makeState = async (now: number) => `${now}.${await hmac(String(now))}`
+export const stateOk = async (state: string, now: number) => {
+  const [at = '', sig = ''] = state.split('.')
+  const made = Number(at)
+  return Number.isFinite(made) && now - made >= 0 && now - made < GITHUB_STATE_MS && same(sig, await hmac(at))
+}
+
+// GitHub's callback is /api/github, rewritten here by vercel.json. Without ?code it starts the sign-in; with one
+// it finishes it. The page gets a one-time handoff in the URL fragment, never the token itself.
+const github = async (req: Request) => {
+  const url = new URL(req.url)
+  const fail = (why: string) => redirect(`/#signin-error=${why}`)
+  const client = process.env.GITHUB_CLIENT_ID
+  const secret = process.env.GITHUB_CLIENT_SECRET
+  const owner = process.env.GITHUB_USER_ID
+  if (!client || !secret || !owner) return fail('not-set-up')
+  if (url.searchParams.get('error')) return fail('cancelled')
+  const now = Date.now()
+  const code = url.searchParams.get('code')
+  if (!code) return redirect(`https://github.com/login/oauth/authorize?${new URLSearchParams({ client_id: client, state: await makeState(now), allow_signup: 'false' })}`)
+  if (!(await stateOk(url.searchParams.get('state') ?? '', now))) return fail('expired')
+  const traded = await fetch('https://github.com/login/oauth/access_token', {
+    method: 'POST',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({ client_id: client, client_secret: secret, code }),
+  })
+  const { access_token } = (await traded.json().catch(() => ({}))) as { access_token?: unknown }
+  if (typeof access_token !== 'string') return fail('github')
+  const user = await fetch('https://api.github.com/user', {
+    headers: { authorization: `Bearer ${access_token}`, accept: 'application/vnd.github+json', 'user-agent': 'slack-drafts-mobile' },
+  })
+  if (!user.ok) return fail('github')
+  const { id } = (await user.json().catch(() => ({}))) as { id?: unknown }
+  if (String(id) !== owner) return fail('not-allowed')
+  const once = b64u(crypto.getRandomValues(new Uint8Array(32)))
+  await redis('SET', `signin:${once}`, '1', 'EX', HANDOFF_SECONDS)
+  return redirect(`/#signin=${once}`)
+}
+
 const rowOf = (raw: unknown): Row | undefined => {
   if (typeof raw !== 'string') return undefined
   try {
@@ -60,7 +116,7 @@ const nameOf = (req: Request) => {
   return NAME.test(name) ? name : null
 }
 
-// Every route but pairing needs the token, so a page or mod without it learns nothing.
+// Every route but the sign-in ones (GitHub, pair, signin) needs the token, so a page or mod without it learns nothing.
 const guard = (req: Request) =>
   authorized(req.headers.get('authorization'), process.env.DRAFTS_TOKEN) ? null : json({ error: 'unauthorized' }, 401)
 
@@ -74,6 +130,10 @@ const handle = async (req: Request, run: () => Promise<Response>) => {
 
 export function GET(req: Request) {
   return handle(req, async () => {
+    const url = new URL(req.url)
+    // a GitHub or store failure mid-redirect lands back on the page with a message, not raw JSON
+    if (url.searchParams.get('action') === 'github' || url.pathname === '/api/github')
+      return github(req).catch(() => redirect('/#signin-error=github'))
     const denied = guard(req)
     if (denied) return denied
     const flat = ((await redis('HGETALL', KEY)) ?? []) as string[]
@@ -115,11 +175,18 @@ export function DELETE(req: Request) {
   })
 }
 
-// ?action=sent|delete&name= (a tap), ?action=pair-start (the setup skill asks for a code),
-// ?action=pair with { code } (the phone trades the code for the token; the one unauthenticated route).
+// ?action=sent|delete&name= (a tap), ?action=pair-start (the setup skill asks for a code), and two
+// unauthenticated sign-ins: ?action=pair with { code } (trades the Mac's code for the token) and
+// ?action=signin with { once } (trades GitHub's one-time handoff for it).
 export function POST(req: Request) {
   return handle(req, async () => {
     const action = new URL(req.url).searchParams.get('action') ?? ''
+    if (action === 'signin') {
+      const body = (await req.json().catch(() => null)) as { once?: unknown } | null
+      const once = typeof body?.once === 'string' && /^[\w-]{43}$/.test(body.once) ? body.once : ''
+      if (!once || (await redis('GETDEL', `signin:${once}`)) !== '1') return json({ error: 'that sign-in expired; sign in with GitHub again' }, 403)
+      return json({ token: process.env.DRAFTS_TOKEN })
+    }
     if (action === 'pair') {
       // the window is made before counting, so a failed call can't leave a counter that never expires
       await redis('SET', 'pairtries', 0, 'EX', PAIR_SECONDS, 'NX')
