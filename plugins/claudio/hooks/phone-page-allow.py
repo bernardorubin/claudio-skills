@@ -1,16 +1,24 @@
 #!/usr/bin/env python3
 """PreToolUse hook: let the Slack Drafts phone page sync with nobody at the Mac.
 
-Allows ArtifactData `query` and `batch` calls to the one artifact the `phoneUrl`
-option names, so the idle sync poll reads phone Sent/trash taps and writes back
+Allows ArtifactData `query` and `batch` calls to the one artifact the mod found as
+the phone page (its link is cached in ~/.config/claudio/slack-drafts-phone-url),
+so the idle sync poll reads phone Sent/trash taps and writes back
 without an approval prompt (a mod's timer can't approve its own calls). Other
 artifacts, other actions and the user's deny/ask rules stay as Claude Code decides.
 """
 import json
 import os
+import re
 import sys
 
-phone_url = os.environ.get("CLAUDE_PLUGIN_OPTION_PHONEURL", "")
+try:
+    with open(os.path.expanduser("~/.config/claudio/slack-drafts-phone-url")) as f:
+        phone_url = f.read().strip()
+except OSError:
+    phone_url = ""
+if not re.fullmatch(r"https://claude\.ai/\S*artifact/[\w-]+", phone_url):
+    phone_url = ""
 try:
     data = json.load(sys.stdin)
 except Exception:

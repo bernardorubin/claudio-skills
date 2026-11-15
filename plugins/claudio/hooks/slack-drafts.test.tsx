@@ -1,9 +1,12 @@
+import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 import { clipboardScript } from './slack-html'
 
 const DIR = '/Users/test/Desktop/slack-drafts'
 const DRAFT = 'Both are on staging.\n\n[HPY-1](https://example.com/HPY-1) is fixed, `pay_today` is `true`.'
+// the phone page's link, which the mod caches here
+const LINK = '/Users/test/.config/claudio/slack-drafts-phone-url'
 const PANE = {
   component: 'Pane' as const,
   requestId: 'slack-drafts',
@@ -95,7 +98,7 @@ test('drops a draft deleted from another session on the next poll', async ($, on
   await after.unmount()
 })
 
-test('trashes a draft deleted on the phone page and keeps one saved since', { options: { phoneUrl: 'https://claude.ai/artifact/x' } }, async ($, on) => {
+test('trashes a draft deleted on the phone page and keeps one saved since', async ($, on) => {
   mock.store(on)
   const clock = mock.clock(on)
   const GONE = 'nick-1014-1530.md'
@@ -111,7 +114,7 @@ test('trashes a draft deleted on the phone page and keeps one saved since', { op
   const moved: string[] = []
   on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
   on('fs.list', () => ({ value: files }))
-  on('fs.read', () => ({ value: DRAFT }))
+  on('fs.read', ($, e) => ({ value: e.path === LINK ? `https://claude.ai/artifact/x\n` : DRAFT }))
   on('process.run', ($, e) => {
     if (e.argv[0] === 'mv') moved.push(String(e.argv[1]))
     return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
@@ -176,7 +179,7 @@ test('Sent moves the draft into sent/ and stamps it; the trash icon moves it to 
   expect(String(mv?.[2])).toStartWith('/Users/test/.Trash/')
 })
 
-test('moves a draft marked Sent on the phone page into sent/', { options: { phoneUrl: 'https://claude.ai/artifact/x' } }, async ($, on) => {
+test('moves a draft marked Sent on the phone page into sent/', async ($, on) => {
   mock.store(on)
   const clock = mock.clock(on)
   const NAME = 'nick-1014-1530.md'
@@ -184,7 +187,7 @@ test('moves a draft marked Sent on the phone page into sent/', { options: { phon
   const runs: string[][] = []
   on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
   on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: 1, mtimeMs: 100, isLink: false }] : [] }))
-  on('fs.read', () => ({ value: DRAFT }))
+  on('fs.read', ($, e) => ({ value: e.path === LINK ? `https://claude.ai/artifact/x\n` : DRAFT }))
   on('process.run', ($, e) => {
     runs.push([...e.argv])
     return { value: ok }
@@ -232,14 +235,14 @@ test('moves sent drafts older than the option to the Trash at session start', { 
   expect(moved).toEqual([`${DIR}/sent/old-1001-0900.md`])
 })
 
-test('a saved draft reaches the phone page; anyone else\'s write to the page still asks', { options: { phoneUrl: 'https://claude.ai/artifact/x' } }, async ($, on) => {
+test('a saved draft reaches the phone page; anyone else\'s write to the page still asks', async ($, on) => {
   mock.store(on)
   const NAME = 'nick-1027-1202.md'
   const synced: unknown[] = []
   const toasts: string[] = []
   on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
   on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: DRAFT.length, mtimeMs: 100, isLink: false }] : [] }))
-  on('fs.read', () => ({ value: DRAFT }))
+  on('fs.read', ($, e) => ({ value: e.path === LINK ? `https://claude.ai/artifact/x\n` : DRAFT }))
   on('ui.toast', ($, e) => {
     toasts.push(String(e.text))
     return { value: undefined }
@@ -262,7 +265,7 @@ test('a saved draft reaches the phone page; anyone else\'s write to the page sti
   expect((await $.tool.check({ tool: 'ArtifactData', input: writes })).decision).toBe('ask')
 })
 
-test('with idleSync, an idle poll picks up a Sent tap from the phone page', { options: { phoneUrl: 'https://claude.ai/artifact/x', idleSync: true } }, async ($, on) => {
+test('with idleSync, an idle poll picks up a Sent tap from the phone page', { options: { idleSync: true } }, async ($, on) => {
   mock.store(on)
   const clock = mock.clock(on)
   const NAME = 'nick-1027-1202.md'
@@ -270,7 +273,7 @@ test('with idleSync, an idle poll picks up a Sent tap from the phone page', { op
   const runs: string[][] = []
   on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
   on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: 1, mtimeMs: 100, isLink: false }] : [] }))
-  on('fs.read', () => ({ value: DRAFT }))
+  on('fs.read', ($, e) => ({ value: e.path === LINK ? `https://claude.ai/artifact/x\n` : DRAFT }))
   on('process.run', ($, e) => {
     runs.push([...e.argv])
     return { value: ok }
@@ -295,7 +298,7 @@ test('with idleSync, an idle poll picks up a Sent tap from the phone page', { op
   expect(runs).toContainEqual(['mv', `${DIR}/${NAME}`, `${DIR}/sent/${NAME}`])
 })
 
-test('without idleSync, an idle poll never reads the page, so it can never prompt', { options: { phoneUrl: 'https://claude.ai/artifact/x' } }, async ($, on) => {
+test('without idleSync, an idle poll never reads the page, so it can never prompt', async ($, on) => {
   mock.store(on)
   const clock = mock.clock(on)
   const calls: string[] = []
@@ -311,19 +314,34 @@ test('without idleSync, an idle poll never reads the page, so it can never promp
 
   await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
   await clock.advance(30_000)
-  expect(calls).toEqual([])
+  // the start's listing of artifacts (it finds the page) is the only call
+  expect(calls).toEqual(['Artifact'])
 })
 
-test('/slack-drafts asks Claude to republish a phone page that no longer opens, then syncs to the new link', { options: { phoneUrl: 'https://claude.ai/artifact/old' } }, async ($, on) => {
+// A file the mod can write: the link cache, read back as written.
+const linkFile = (on: On, start: string, written: string[] = []) => {
+  let link = start
+  on('fs.read', ($, e) => ({ value: e.path === LINK ? link : DRAFT }))
+  on('fs.write', ($, e) => {
+    if (e.path === LINK) written.push((link = e.text))
+    return { value: undefined }
+  })
+  on('process.run', () => ({ value: ok }))
+  return written
+}
+
+// what the Artifact tool lists for `action: 'list'`
+const listing = (...lines: string[]) => `${lines.length} published artifacts (most recently opened or updated first):\n${lines.join('\n')}`
+
+test('/slack-drafts asks Claude to republish a phone page that no longer opens, then syncs to the new link', async ($, on) => {
   mock.store(on)
   const clock = mock.clock(on)
   const NAME = 'nick-1014-1530.md'
   const prompts: string[] = []
-  const saved: [string, unknown][] = []
   const calls: string[] = []
   on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
   on('fs.list', () => ({ value: [{ name: NAME, kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false }] }))
-  on('fs.read', () => ({ value: DRAFT }))
+  const written = linkFile(on, 'https://claude.ai/artifact/old\n')
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
   on('ui.toast', () => ({ value: undefined }))
   on('tool.check', () => ({ decision: 'allow' as const }))
@@ -331,12 +349,10 @@ test('/slack-drafts asks Claude to republish a phone page that no longer opens, 
     prompts.push(e.text)
     return { text: e.text }
   })
-  on('config.set', ($, e) => {
-    saved.push([e.key, e.value])
-    return { value: e.value }
-  })
   on('tool.call', ($, e) => {
     if (e.tool === 'ArtifactComments') calls.push(`watch ${e.url} ${e.on}`)
+    // a listing that no longer shows the deleted page
+    if (e.tool === 'Artifact' && e.action === 'list') return { result: {}, text: listing('- (mine) Week Ending October 8 — https://claude.ai/artifact/W1 — updated 2026-10-08') }
     if (e.tool !== 'ArtifactData') return { result: {}, text: 'Published /tmp/pad/slack-drafts-phone/index.html at https://claude.ai/artifact/NEW1 (Version 1, version id 1)' }
     calls.push(`${e.action} ${e.url}`)
     return e.url.endsWith('/old')
@@ -353,15 +369,15 @@ test('/slack-drafts asks Claude to republish a phone page that no longer opens, 
   expect(prompts[0]).toContain('/slack-drafts-phone/index.html')
   expect(calls).not.toContain('batch https://claude.ai/artifact/old')
 
-  // Claude's publish of the page: its link is saved and the drafts go there
+  // Claude's publish of the page: its link is cached and the drafts go there
   await $.tool.call({ tool: 'Artifact', action: 'publish', file_path: '/tmp/pad/slack-drafts-phone/index.html' })
-  expect(saved).toEqual([['claudio.phoneUrl', 'https://claude.ai/artifact/NEW1']])
+  expect(written).toEqual(['https://claude.ai/artifact/NEW1\n'])
   expect(calls).toContain('batch https://claude.ai/artifact/NEW1')
   // the publish's comment watch is stopped, so a resumed session has none to report
   expect(calls).toContain('watch https://claude.ai/artifact/NEW1 false')
 })
 
-test('/slack-drafts publishes a phone page where none is set', async ($, on) => {
+test('/slack-drafts publishes a phone page where none is found', async ($, on) => {
   mock.store(on)
   const clock = mock.clock(on)
   const prompts: string[] = []
@@ -372,6 +388,8 @@ test('/slack-drafts publishes a phone page where none is set', async ($, on) => 
     prompts.push(e.text)
     return { text: e.text }
   })
+  on('tool.check', () => ({ decision: 'allow' as const }))
+  on('tool.call', () => ({ result: {}, text: listing('- (mine) Week Ending October 8 — https://claude.ai/artifact/W1 — updated 2026-10-08') }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('session.start', () => ({ cwd: '/Users/test' }))
 
@@ -387,20 +405,34 @@ test('/slack-drafts publishes a phone page where none is set', async ($, on) => 
   expect(prompts).toHaveLength(1)
 })
 
-test('a session with no link follows a page another session already published', async ($, on) => {
-  mock.store(on, { phoneMoves: { '': 'https://claude.ai/artifact/NEW1' } })
+test('a start finds the pinned Slack Drafts page by listing, caches it, and /slack-drafts prints it', async ($, on) => {
+  mock.store(on)
   const clock = mock.clock(on)
   const prompts: string[] = []
   const calls: string[] = []
   on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', () => ({ value: [] }))
+  on('fs.list', () => ({ value: [{ name: 'nick-1014-1530.md', kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false }] }))
+  // the cache still names a page that was deleted since
+  const written = linkFile(on, 'https://claude.ai/artifact/gone\n')
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
-  on('tool.check', () => ({ decision: 'allow' as const }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('tool.check', () => ({ decision: 'ask' as const })) // what core answers for an artifact call
   on('prompt.submit', ($, e) => {
     prompts.push(e.text)
     return { text: e.text }
   })
   on('tool.call', ($, e) => {
+    if (e.tool === 'Artifact' && e.action === 'list') {
+      calls.push('list')
+      return {
+        result: {},
+        text: listing(
+          '- (mine) Slack Drafts — https://claude.ai/artifact/OLD — updated 2026-11-14',
+          '- (mine) Week Ending October 8 — https://claude.ai/artifact/W1 — updated 2026-10-08',
+          '- (mine, pinned) Slack Drafts — https://claude.ai/artifact/PIN — updated 2026-11-06',
+        ),
+      }
+    }
     if (e.tool === 'ArtifactData') calls.push(`${e.action} ${e.url}`)
     return { result: {}, text: '0 documents' }
   })
@@ -408,72 +440,101 @@ test('a session with no link follows a page another session already published', 
   on('session.start', () => ({ cwd: '/Users/test' }))
 
   await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  expect(written).toEqual(['https://claude.ai/artifact/PIN\n'])
+  const r = await $.command.run({ command: 'slack-drafts' })
+  await clock.advance(1)
+  expect(r.text).toContain('Phone page: https://claude.ai/artifact/PIN')
+  expect(prompts).toEqual([])
+  expect(calls).toContain('batch https://claude.ai/artifact/PIN')
+  expect(calls.some(c => c.endsWith('/gone') || c.endsWith('/OLD'))).toBe(false)
+  // only the mod's own listing is allowed; anyone else's still asks
+  expect((await $.tool.check({ tool: 'Artifact', input: { action: 'list' } })).decision).toBe('ask')
+})
+
+test('a listing that shows no Slack Drafts page keeps the page in use', async ($, on) => {
+  mock.store(on)
+  const calls: string[] = []
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', () => ({ value: [{ name: 'nick-1014-1530.md', kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false }] }))
+  const written = linkFile(on, 'https://claude.ai/artifact/x\n')
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('tool.check', () => ({ decision: 'allow' as const }))
+  on('tool.call', ($, e) => {
+    if (e.tool === 'Artifact') return { result: {}, text: listing('- (mine) Week Ending October 8 — https://claude.ai/artifact/W1 — updated 2026-10-08') }
+    if (e.tool === 'ArtifactData') calls.push(`${e.action} ${e.url}`)
+    return { result: {}, text: '0 documents' }
+  })
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  await $.command.run({ command: 'slack-drafts' })
+  expect(written).toEqual([])
+  expect(calls).toContain('batch https://claude.ai/artifact/x')
+})
+
+test('a session that cannot list artifacts follows the page another session cached', async ($, on) => {
+  mock.store(on)
+  const clock = mock.clock(on)
+  const prompts: string[] = []
+  const calls: string[] = []
+  let link = ''
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', () => ({ value: [] }))
+  on('fs.read', ($, e) => ({ value: e.path === LINK ? link : DRAFT }))
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('tool.check', () => ({ decision: 'allow' as const }))
+  on('prompt.submit', ($, e) => {
+    prompts.push(e.text)
+    return { text: e.text }
+  })
+  on('tool.call', ($, e) => {
+    if (e.tool === 'Artifact') throw new Error('No such tool available: Artifact')
+    if (e.tool === 'ArtifactData') calls.push(`${e.action} ${e.url}`)
+    return { result: {}, text: '0 documents' }
+  })
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  // another session publishes the page after this one started
+  link = 'https://claude.ai/artifact/NEW1\n'
   await $.command.run({ command: 'slack-drafts' })
   await clock.advance(1)
   expect(prompts).toEqual([])
   expect(calls).toContain('query https://claude.ai/artifact/NEW1')
 })
 
-test('a session still holding a replaced link follows the new page instead of publishing another', { options: { phoneUrl: 'https://claude.ai/artifact/old' } }, async ($, on) => {
-  // another session already replaced old with NEW1
-  mock.store(on, { phoneMoves: { 'https://claude.ai/artifact/old': 'https://claude.ai/artifact/NEW1' } })
-  const clock = mock.clock(on)
-  const prompts: string[] = []
-  const calls: string[] = []
+test('an install from 4.25 keeps syncing to the page it last synced, and caches its link', async ($, on) => {
+  mock.store(on, { syncedUrl: 'https://claude.ai/artifact/x' })
+  const NAME = 'nick-1027-1202.md'
+  const batches: string[] = []
   on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', () => ({ value: [{ name: 'nick-1014-1530.md', kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false }] }))
-  on('fs.read', () => ({ value: DRAFT }))
+  on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: DRAFT.length, mtimeMs: 100, isLink: false }] : [] }))
+  const written = linkFile(on, '')
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
   on('tool.check', () => ({ decision: 'allow' as const }))
-  on('prompt.submit', ($, e) => {
-    prompts.push(e.text)
-    return { text: e.text }
-  })
   on('tool.call', ($, e) => {
-    if (e.tool === 'ArtifactData') calls.push(`${e.action} ${e.url}`)
-    return { result: {}, text: '0 documents' }
+    if (e.tool === 'Artifact') throw new Error('No such tool available: Artifact')
+    if (e.tool === 'ArtifactData' && e.action === 'batch') batches.push(String(e.url))
+    return { result: {}, text: '' }
   })
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('session.start', () => ({ cwd: '/Users/test' }))
 
   await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
-  await $.command.run({ command: 'slack-drafts' })
-  await clock.advance(1)
-  expect(prompts).toEqual([])
-  expect(calls).toContain('batch https://claude.ai/artifact/NEW1')
-  expect(calls.some(c => c.endsWith('/old'))).toBe(false)
+  expect(written).toEqual(['https://claude.ai/artifact/x\n'])
+  await $.tool.call({ tool: 'Write', file_path: `${DIR}/${NAME}`, content: DRAFT })
+  expect(batches).toEqual(['https://claude.ai/artifact/x'])
 })
 
-test('a start re-saves a setting still holding a replaced link, and toasts when it cannot', { options: { phoneUrl: 'https://claude.ai/artifact/old' } }, async ($, on) => {
-  mock.store(on, { phoneMoves: { 'https://claude.ai/artifact/old': 'https://claude.ai/artifact/NEW1' } })
-  mock.clock(on)
-  const saved: unknown[] = []
-  const toasts: string[] = []
-  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', () => ({ value: [] }))
-  on('ui.toast', ($, e) => {
-    toasts.push(e.text)
-    return { value: undefined }
-  })
-  on('config.set', ($, e) => {
-    saved.push(e.value)
-    return { deny: 'refused by a test' }
-  })
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('session.start', () => ({ cwd: '/Users/test' }))
-
-  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
-  expect(saved).toEqual(['https://claude.ai/artifact/NEW1'])
-  expect(toasts.some(t => t.includes('NEW1') && t.includes('refused by a test'))).toBe(true)
-})
-
-test('/slack-drafts still answers in a session that cannot reach artifacts', { options: { phoneUrl: 'https://claude.ai/artifact/x' } }, async ($, on) => {
+test('/slack-drafts still answers in a session that cannot reach artifacts', async ($, on) => {
   mock.store(on)
   const NAME = 'jose-1113-1122.md'
   const toasts: string[] = []
   on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
   on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false }] : [] }))
-  on('fs.read', () => ({ value: DRAFT }))
+  on('fs.read', ($, e) => ({ value: e.path === LINK ? `https://claude.ai/artifact/x\n` : DRAFT }))
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
   on('ui.toast', ($, e) => {
     toasts.push(String(e.text))
@@ -494,14 +555,14 @@ test('/slack-drafts still answers in a session that cannot reach artifacts', { o
   expect(JSON.stringify(r)).toContain("can't reach artifacts")
 })
 
-test('with idleSync, another session pushes a draft the saving session could not', { options: { phoneUrl: 'https://claude.ai/artifact/x', idleSync: true } }, async ($, on) => {
+test('with idleSync, another session pushes a draft the saving session could not', { options: { idleSync: true } }, async ($, on) => {
   mock.store(on)
   const clock = mock.clock(on)
   const NAME = 'jose-1113-1122.md'
   const batches: unknown[] = []
   on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
   on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: 1, mtimeMs: 100, isLink: false }] : [] }))
-  on('fs.read', () => ({ value: DRAFT }))
+  on('fs.read', ($, e) => ({ value: e.path === LINK ? `https://claude.ai/artifact/x\n` : DRAFT }))
   on('ui.toast', () => ({ value: undefined }))
   // stands in for the plugin's PreToolUse hook (phone-page-allow.py), which approves this page's syncs
   on('tool.check', () => ({ decision: 'allow' as const }))

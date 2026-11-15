@@ -257,14 +257,15 @@ the Slack Drafts phone page, whose Copy for Slack keeps links and code.
 
 So when the user says they are on their phone, on the road, or away from their
 laptop, save exactly as above and change only the report line: link the phone
-page instead of giving the path. Its URL is the plugin's `phoneUrl` option:
+page instead of giving the path. The mod finds the page (your own pinned
+"Slack Drafts" artifact) and keeps its link here:
 
 ```bash
-jq -r '.pluginConfigs["claudio@claudio"].options.phoneUrl // empty' ~/.claude/settings.json
+cat ~/.config/claudio/slack-drafts-phone-url 2>/dev/null
 ```
 
-Empty means no phone page is set up: say the draft is saved and that the phone
-page needs its one-time setup (the plugin README's Mods section). The page only
+Empty means the mod hasn't found a page yet: say the draft is saved and that
+`/slack-drafts` finds the page, or publishes one when there is none. The page only
 receives drafts saved in folder mode.
 
 ### Knowing what was sent
