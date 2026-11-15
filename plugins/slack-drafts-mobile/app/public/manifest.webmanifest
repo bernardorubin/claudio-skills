@@ -1,0 +1,12 @@
+{
+  "name": "Slack Drafts",
+  "short_name": "Drafts",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f6f5",
+  "theme_color": "#0f6b5c",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

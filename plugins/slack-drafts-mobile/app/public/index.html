@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Slack Drafts</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Slack Drafts">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;0,900;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* One phone-width column; each draft reads like a Slack message (avatar, name and time, the message under the name), its actions full width below. */
+  :root {
+    --bg: #f4f6f5;
+    --surface: #ffffff;
+    --fg: #1d2321;
+    --muted: #5d6763;
+    --rule: #dce1de;
+    --accent: #0f6b5c;
+    --accent-ink: #ffffff;
+    --accent-soft: #e1efea;
+    --mention: #6a3ab8;
+    --mention-bg: #efe8fb;
+    --code-bg: #eef1ef;
+    --code-fg: #b4234a;
+    --ok: #1d7a43;
+    --ok-ink: #ffffff;
+    --err: #b3261e;
+    --body: "Lato", "Helvetica Neue", Arial, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141816; --surface: #1c211f; --fg: #e6ebe8; --muted: #9aa5a0; --rule: #2e3532;
+      --accent: #4fc3a8; --accent-ink: #0b1411; --accent-soft: #1f3430;
+      --mention: #c6abff; --mention-bg: #2f2747; --code-bg: #262c29; --code-fg: #f08ba5;
+      --ok: #6fd39a; --ok-ink: #0b1411; --err: #ff8a80; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141816; --surface: #1c211f; --fg: #e6ebe8; --muted: #9aa5a0; --rule: #2e3532;
+    --accent: #4fc3a8; --accent-ink: #0b1411; --accent-soft: #1f3430;
+    --mention: #c6abff; --mention-bg: #2f2747; --code-bg: #262c29; --code-fg: #f08ba5;
+    --ok: #6fd39a; --ok-ink: #0b1411; --err: #ff8a80; color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--fg); font: 16px/1.5 var(--body); padding-block: 20px 40px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  main { max-width: 600px; margin: 0 auto; display: grid; gap: 20px; }
+  header { display: grid; gap: 4px; }
+  h1 { font: 900 1.625rem/1.15 var(--body); margin: 0; text-wrap: balance; }
+  .lede { margin: 0; color: var(--muted); font-size: 0.9375rem; }
+  .list { display: grid; gap: 14px; }
+
+  .draft { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 14px;
+    display: grid; grid-template-columns: 36px minmax(0, 1fr); column-gap: 10px; row-gap: 14px; }
+  .draft:has(button.copied) { border-color: var(--ok); }
+  /* Slack's rounded-square avatar, with the recipient's initial */
+  .avatar { width: 36px; height: 36px; border-radius: 8px; background: var(--accent-soft); color: var(--accent);
+    display: grid; place-items: center; font-weight: 900; font-size: 1.05rem; text-transform: uppercase; }
+  .content { display: grid; gap: 8px; min-width: 0; }
+  .meta { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; line-height: 1.2; }
+  .who { font-weight: 900; }
+  .when { font-size: 0.8125rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .where { color: var(--muted); font-size: 0.875rem; line-height: 1.4; display: grid; gap: 2px; overflow-wrap: anywhere; min-width: 0; }
+  .where p { margin: 0; }
+  .where a { color: var(--accent); font-weight: 700; text-decoration: none; }
+  .files { margin: 0; color: var(--muted); font-size: 0.875rem; overflow-wrap: anywhere; display: flex; gap: 6px; align-items: flex-start; }
+  .files svg { width: 16px; height: 16px; flex: none; margin-top: 2px; }
+
+  .message { overflow-wrap: anywhere; min-width: 0; }
+  .message p { margin: 0 0 8px; }
+  .message p:last-child, .message ul:last-child, .message ol:last-child, .message pre:last-child, .message blockquote:last-child { margin-bottom: 0; }
+  .message ul, .message ol { margin: 0 0 8px; padding-left: 22px; }
+  .message a { color: var(--accent); }
+  .message code { font: 0.86em var(--mono); background: var(--code-bg); color: var(--code-fg); padding: 1px 4px; border-radius: 3px; }
+  .message pre { margin: 0 0 8px; padding: 8px 10px; background: var(--code-bg); border-radius: 6px; overflow-x: auto; }
+  .message pre code { background: none; color: var(--fg); padding: 0; }
+  .message blockquote { margin: 0 0 8px; padding-left: 10px; border-left: 3px solid var(--rule); color: var(--muted); }
+  /* a typed @name pastes as plain text, so it is the one to re-tag in Slack */
+  .mention { color: var(--mention); background: var(--mention-bg); font-weight: 700; padding: 0 3px; border-radius: 4px; }
+
+  .actions, .status { grid-column: 1 / -1; }
+  .actions { display: flex; gap: 8px; }
+  button { font: 700 0.9375rem/1 var(--body); min-height: 44px; padding: 0 14px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--accent); background: transparent; color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+  button svg { width: 18px; height: 18px; flex: none; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); flex: 1 1 auto; }
+  button.primary.copied { background: var(--ok); border-color: var(--ok); color: var(--ok-ink); }
+  button.quiet { border-color: var(--rule); color: var(--muted); padding: 0 12px; }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .status { margin: -4px 0 0; font-size: 0.875rem; line-height: 1.4; font-weight: 700; }
+  .status:empty { display: none; }
+  .status.ok { color: var(--ok); }
+  .status.err { color: var(--err); }
+
+  .empty { background: var(--surface); border: 1px dashed var(--rule); border-radius: 12px; padding: 20px 16px; color: var(--muted); display: grid; gap: 6px; }
+  .empty strong { color: var(--fg); }
+  code.inline { font: 0.86em var(--mono); background: var(--code-bg); color: var(--code-fg); padding: 1px 4px; border-radius: 3px; }
+
+  /* pairing: the Mac shows a six-digit code, the phone types it once */
+  .pair { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 20px 16px; display: grid; gap: 12px; }
+  .pair strong { font-size: 1.05rem; }
+  .pair p { margin: 0; color: var(--muted); }
+  .pair form { display: flex; gap: 8px; }
+  .pair input { font: 700 1.25rem/1 var(--mono); letter-spacing: 0.2em; min-height: 44px; padding: 0 12px; flex: 1 1 auto; min-width: 0;
+    border: 1px solid var(--rule); border-radius: 8px; background: var(--bg); color: var(--fg); }
+  .pair input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .code { font: 700 2.5rem/1 var(--mono); letter-spacing: 0.25em; color: var(--accent); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .draft { transition: border-color 0.2s; }
+    button { transition: background-color 0.15s, border-color 0.15s, color 0.15s; }
+    button.copied { animation: pop 0.32s ease-out; }
+    @keyframes pop { 0% { transform: scale(0.95); } 60% { transform: scale(1.03); } 100% { transform: none; } }
+  }
+</style>
+
+<main>
+  <header>
+    <h1>Slack Drafts</h1>
+    <p class="lede" id="lede">Drafts from <code class="inline">/write-slack-message</code>, ready to paste into Slack with links and code intact.</p>
+  </header>
+  <div class="list" id="list">
+    <div class="empty" id="empty">
+      <strong>Loading your drafts…</strong>
+      <span>New drafts appear here a few seconds after Claude saves them on the Mac.</span>
+    </div>
+  </div>
+</main>
+
+<script src="slack-html.js"></script>
+<script>
+  const list = document.getElementById('list');
+  const lede = document.getElementById('lede');
+  const { toHtml, labelOf, splitDraft, MENTION } = window.SlackHtml;
+  let drafts = []; // newest version of each draft name, newest first
+  let drawn = null; // the drafts the list last drew, so a snapshot that changes none leaves the cards (and their Copied state) alone
+  const copiedAt = new Map(); // draft name -> when its last copy worked; outlives a redraw
+  const HOLD_MS = 4000; // how long the button itself says Copied
+
+  const svg = d => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+  const ICON_COPY = svg('<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/>');
+  const ICON_CHECK = svg('<path d="M4 12.5l5 5L20 6.5"/>');
+  const ICON_TRASH = svg('<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/>');
+  const ICON_CLIP = svg('<path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/>');
+
+  const showEmpty = (title, body) => {
+    list.innerHTML = '';
+    const box = document.createElement('div');
+    box.className = 'empty';
+    const t = document.createElement('strong'); t.textContent = title;
+    const b = document.createElement('span'); b.textContent = body;
+    box.append(t, b);
+    list.append(box);
+  };
+
+  // Display only: each @name outside code and links gets the mention color; the copy still takes the draft as written.
+  const markMentions = root => {
+    const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: n => (n.parentElement && n.parentElement.closest('code, pre, a') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+    });
+    const texts = [];
+    while (walk.nextNode()) texts.push(walk.currentNode);
+    for (const node of texts) {
+      const parts = node.data.split(MENTION);
+      if (parts.length < 2) continue;
+      node.replaceWith(...parts.map((p, i) => {
+        if (i % 2 === 0) return document.createTextNode(p);
+        const s = document.createElement('span'); s.className = 'mention'; s.textContent = p;
+        return s;
+      }));
+    }
+    return root;
+  };
+
+  // Links in a draft are rendered live, so only web links survive.
+  const safeHtml = md => {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = toHtml(md);
+    tpl.content.querySelectorAll('a').forEach(a => {
+      if (!/^https?:\/\//i.test(a.getAttribute('href') || '')) a.replaceWith(document.createTextNode(a.textContent));
+      else { a.target = '_blank'; a.rel = 'noopener'; }
+    });
+    return tpl.content;
+  };
+
+  const say = (el, ok, text) => { el.textContent = text; el.className = 'status ' + (ok ? 'ok' : 'err'); };
+  const why = e => (e && (e.code || e.name || e.message)) || 'unknown error';
+  const clock = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  // The button says Copied for HOLD_MS, then the line under it keeps saying when.
+  const paintCopy = (btn, status, name) => {
+    const at = copiedAt.get(name);
+    const fresh = at !== undefined && Date.now() - at < HOLD_MS;
+    btn.classList.toggle('copied', fresh);
+    btn.innerHTML = fresh ? ICON_CHECK + '<span>Copied</span>' : ICON_COPY + '<span>Copy for Slack</span>';
+    if (at !== undefined) say(status, true, 'Copied at ' + clock(at) + '. Paste it into Slack, then tap Sent.');
+    if (fresh) setTimeout(() => { if (btn.isConnected) paintCopy(btn, status, name); }, HOLD_MS - (Date.now() - at));
+  };
+
+  // The copy takes the message alone, never the where-to-post lines above it.
+  const copyFormatted = async (md, name, btn, status) => {
+    try {
+      if (!window.ClipboardItem || !navigator.clipboard?.write) throw new Error('formatted copy is not available here');
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([toHtml(md)], { type: 'text/html' }),
+        'text/plain': new Blob([md], { type: 'text/plain' }),
+      })]);
+      copiedAt.set(name, Date.now());
+      paintCopy(btn, status, name);
+    } catch (e) {
+      say(status, false, 'Could not copy (' + why(e) + '). Tap Copy for Slack again.');
+    }
+  };
+
+  const render = () => {
+    if (drafts.length === 0) {
+      lede.textContent = 'Drafts from Claude, ready to paste into Slack with links and code intact.';
+      showEmpty('No drafts yet', 'Ask Claude for a Slack message on the Mac and it shows up here.');
+      return;
+    }
+    lede.textContent = drafts.length + (drafts.length === 1 ? ' draft' : ' drafts') + ', newest first. Copy one, paste it into Slack, then tap Sent.';
+    list.innerHTML = '';
+    for (const d of drafts) {
+      const { who, when } = labelOf(d.name);
+      const card = document.createElement('article');
+      card.className = 'draft';
+
+      const avatar = document.createElement('div'); avatar.className = 'avatar'; avatar.setAttribute('aria-hidden', 'true');
+      avatar.textContent = (who.match(/[A-Za-z0-9]/) || ['#'])[0];
+
+      const content = document.createElement('div'); content.className = 'content';
+      const meta = document.createElement('div'); meta.className = 'meta';
+      const w = document.createElement('span'); w.className = 'who'; w.textContent = who;
+      const t = document.createElement('span'); t.className = 'when'; t.textContent = when;
+      meta.append(w, t);
+
+      const { body, where, attachments = [] } = splitDraft(d.md);
+      const place = document.createElement('div'); place.className = 'where';
+      place.hidden = where === '';
+      if (where) place.append(safeHtml(where));
+      // The files live on the Mac, so the page names them for the paste there.
+      const files = document.createElement('p'); files.className = 'files';
+      files.hidden = attachments.length === 0;
+      files.innerHTML = ICON_CLIP;
+      files.append(document.createTextNode('Attach on the Mac: ' + attachments.map(p => p.split('/').pop()).join(', ')));
+
+      const msg = document.createElement('div'); msg.className = 'message';
+      msg.append(markMentions(safeHtml(body)));
+      content.append(meta, place, files, msg);
+
+      const status = document.createElement('p'); status.className = 'status'; status.setAttribute('role', 'status');
+
+      const actions = document.createElement('div'); actions.className = 'actions';
+      const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'primary';
+      paintCopy(copy, status, d.name);
+      copy.addEventListener('click', () => copyFormatted(body, d.name, copy, status));
+      // A mark, not a delete, so the Mac sees it: Sent moves its file to
+      // sent/ (so Claude knows it went out), the trash icon moves it to the Trash.
+      const done = async sent => {
+        try {
+          const r = await api('POST', '?action=' + (sent ? 'sent' : 'delete') + '&name=' + encodeURIComponent(d.name));
+          if (!r.ok) throw new Error('the page answered ' + r.status);
+          drafts = drafts.filter(x => x.name !== d.name);
+          drawn = null;
+          render();
+        } catch (e) {
+          say(status, false, 'Could not ' + (sent ? 'mark it sent' : 'discard it') + ' (' + why(e) + ').');
+        }
+      };
+      const sentBtn = document.createElement('button'); sentBtn.type = 'button'; sentBtn.textContent = 'Sent';
+      sentBtn.addEventListener('click', () => done(true));
+      const del = document.createElement('button'); del.type = 'button'; del.className = 'quiet';
+      del.setAttribute('aria-label', 'Discard draft'); del.title = 'Discard';
+      del.innerHTML = ICON_TRASH;
+      del.addEventListener('click', () => done(false));
+      actions.append(copy, sentBtn, del);
+
+      card.append(avatar, content, actions, status);
+      list.append(card);
+    }
+  };
+
+  // The token lives in this browser only. A phone gets it by trading the
+  // six-digit code the Mac shows; the Mac's pairing page never keeps it.
+  const TOKEN_KEY = 'slackDraftsToken';
+  let token = localStorage.getItem(TOKEN_KEY) || '';
+  const api = (method, query = '', body) => fetch('/api/drafts' + query, {
+    method,
+    cache: 'no-store',
+    headers: Object.assign({ Authorization: 'Bearer ' + token }, body ? { 'Content-Type': 'application/json' } : {}),
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const panel = (title, text) => {
+    list.innerHTML = '';
+    const box = document.createElement('div'); box.className = 'pair';
+    const t = document.createElement('strong'); t.textContent = title;
+    const p = document.createElement('p'); p.textContent = text;
+    box.append(t, p);
+    list.append(box);
+    return box;
+  };
+
+  const showPairForm = note => {
+    lede.textContent = 'Sign this phone in once with the code your Mac shows.';
+    const box = panel('Enter the code from your Mac', note || 'Run /slack-drafts-mobile in Claude Code on your Mac to show a six-digit code.');
+    const form = document.createElement('form');
+    const input = document.createElement('input');
+    Object.assign(input, { inputMode: 'numeric', autocomplete: 'one-time-code', maxLength: 6, placeholder: '000000', required: true });
+    input.setAttribute('aria-label', 'Six-digit code');
+    const go = document.createElement('button'); go.type = 'submit'; go.className = 'primary'; go.textContent = 'Sign in';
+    const status = document.createElement('p'); status.className = 'status'; status.setAttribute('role', 'status');
+    form.append(input, go);
+    box.append(form, status);
+    form.addEventListener('submit', async ev => {
+      ev.preventDefault();
+      try {
+        const r = await fetch('/api/drafts?action=pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: input.value }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.token) throw new Error(j.error || 'the page answered ' + r.status);
+        token = j.token;
+        localStorage.setItem(TOKEN_KEY, token);
+        drawn = null;
+        load();
+      } catch (e) {
+        say(status, false, 'Could not sign in (' + why(e) + ').');
+      }
+    });
+    input.focus();
+  };
+
+  // On the Mac: show a fresh code for the phone. The token came in the link's fragment and is used for this one request.
+  const showMacCode = async macToken => {
+    lede.textContent = 'Pair your phone with this page.';
+    try {
+      const r = await fetch('/api/drafts?action=pair-start', { method: 'POST', headers: { Authorization: 'Bearer ' + macToken } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.code) throw new Error(j.error || 'the page answered ' + r.status);
+      const box = panel('Your code', 'On your phone, open ' + location.origin + ' and enter this code. It works once, for five minutes.');
+      const code = document.createElement('div'); code.className = 'code'; code.textContent = j.code;
+      box.insertBefore(code, box.lastChild);
+    } catch (e) {
+      panel('Could not make a code', 'The page answered: ' + why(e) + '. Run /slack-drafts-mobile again.');
+    }
+  };
+
+  const load = async () => {
+    if (!token) return showPairForm();
+    try {
+      const r = await api('GET');
+      if (r.status === 401) {
+        token = '';
+        localStorage.removeItem(TOKEN_KEY);
+        return showPairForm('This phone was signed out, maybe after a new token. Run /slack-drafts-mobile on your Mac for a new code.');
+      }
+      if (!r.ok) throw new Error('the page answered ' + r.status);
+      const rows = (await r.json()).drafts || [];
+      const live = rows.filter(x => x && x.state === 'open' && typeof x.name === 'string')
+        .map(x => ({ name: x.name, md: String(x.md || ''), savedAt: x.savedAt || 0 }))
+        .sort((a, b) => b.savedAt - a.savedAt);
+      const key = live.map(d => d.name + '@' + d.savedAt + '#' + d.md.length).join('|');
+      if (key !== drawn) {
+        drawn = key;
+        drafts = live;
+        render();
+      }
+    } catch (e) {
+      drawn = null;
+      showEmpty('Could not load drafts', 'The page answered: ' + why(e) + '. It tries again in a few seconds.');
+    }
+  };
+
+  const frag = new URLSearchParams(location.hash.slice(1));
+  if (location.hash) history.replaceState(null, '', location.pathname);
+  if (frag.get('pair')) {
+    showMacCode(frag.get('pair'));
+  } else {
+    load();
+    // ponytail: a 15 s refresh while the page is in view, and one on every return to it
+    setInterval(() => { if (document.visibilityState === 'visible' && token) load(); }, 15000);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && token) load(); });
+  }
+</script>

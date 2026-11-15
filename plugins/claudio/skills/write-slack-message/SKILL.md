@@ -257,16 +257,19 @@ the Slack Drafts phone page, whose Copy for Slack keeps links and code.
 
 So when the user says they are on their phone, on the road, or away from their
 laptop, save exactly as above and change only the report line: link the phone
-page instead of giving the path. The mod finds the page (your own
-"Slack Drafts" artifact, pinned first) and keeps a copy of its link here:
+page instead of giving the path. With the `slack-drafts-mobile` plugin set up,
+the page is on the user's own Vercel account and its link is in the keychain;
+otherwise it is the "Slack Drafts" artifact, whose link the claudio mod keeps in
+a file. Take the first that prints a link:
 
 ```bash
-cat ~/.config/claudio/slack-drafts-phone-url 2>/dev/null
+security find-generic-password -s claudio-slack-drafts-mobile -a url -w 2>/dev/null \
+  || cat ~/.config/claudio/slack-drafts-phone-url 2>/dev/null
 ```
 
-Empty means the mod hasn't found a page yet: say the draft is saved and that
-`/slack-drafts` finds the page, or publishes one when there is none. The page only
-receives drafts saved in folder mode.
+Empty means no phone page is set up: say the draft is saved and that
+`/slack-drafts-mobile` sets one up. The page only receives drafts saved in folder
+mode.
 
 ### Knowing what was sent
 

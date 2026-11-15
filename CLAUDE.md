@@ -26,7 +26,7 @@ claudio-skills/                       # repo folder; the plugin inside is named 
 
 - **Marketplace name**: `claudio` (set in `.claude-plugin/marketplace.json`)
 - **GitHub identifier**: `bernardorubin/claudio-skills` (used in `/plugin marketplace add`)
-- **Single plugin**: `claudio` — bundles 34 skills (no commands) and one hooks module carrying two mods. The `pr-review` skill itself supports three modes: PR review, local diff review, and full-repo audit.
+- **Plugins**: `claudio` — bundles 34 skills (no commands) and one hooks module carrying two mods. The `pr-review` skill itself supports three modes: PR review, local diff review, and full-repo audit. Also `slack-drafts-mobile` (`plugins/slack-drafts-mobile/`): an optional mod plus a setup skill and a small Vercel app (`app/`) that puts the drafts on a phone page on the user's own Vercel account; it shares only the drafts folder with claudio. Keep each plugin's `version` in sync with its marketplace entry.
 - **Install path** (after `/plugin install`): `~/.claude/plugins/cache/claudio/claudio/<version>/`
 
 When users update the marketplace and reinstall, the harness pulls from `main` of this repo via the `git-subdir` source defined in `marketplace.json`.

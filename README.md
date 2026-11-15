@@ -78,6 +78,10 @@ Two function-hook mods ship inside `claudio`, so there is nothing extra to insta
 
 See [the plugin README's Mods section](plugins/claudio/README.md#mods) for the one-time phone setup.
 
+## slack-drafts-mobile (optional)
+
+A second plugin in this marketplace puts your drafts on a page on your own Vercel account, synced over plain HTTPS, so it works in every Claude Code session, Remote Control included. Install it with `/plugin install slack-drafts-mobile@claudio`, then run `/slack-drafts-mobile`. See [its README](plugins/slack-drafts-mobile/README.md).
+
 ## License
 
 MIT
