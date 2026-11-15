@@ -1,6 +1,6 @@
 ---
 name: slack-drafts-mobile
-description: Set up, check, re-pair or re-key the Slack Drafts phone page, a small page on the user's own Vercel account that their /write-slack-message drafts sync to, so they can copy a draft into Slack on their phone with links and code intact and tap Sent there. Triggers on "set up slack drafts on my phone", "slack drafts mobile", "/slack-drafts-mobile", "pair my phone with slack drafts", "the phone page isn't syncing", "rotate the slack drafts token". Arguments: none (set up or check), "pair" (a new phone code), "--rotate" (a new token).
+description: Set up, check, re-pair, re-key or reset passkeys for the Slack Drafts phone page, a small page on the user's own Vercel account that their /write-slack-message drafts sync to, so they can copy a draft into Slack on their phone with links and code intact and tap Sent there. Triggers on "set up slack drafts on my phone", "slack drafts mobile", "/slack-drafts-mobile", "pair my phone with slack drafts", "the phone page isn't syncing", "rotate the slack drafts token". Arguments: none (set up or check), "pair" (a new phone code), "--rotate" (a new token), "--forget-passkeys" (remove every Face ID sign-in).
 ---
 
 # Slack Drafts on the phone
@@ -27,7 +27,7 @@ kc() { security find-generic-password -s claudio-slack-drafts-mobile -a "$1" -w;
 
 1. `command -v vercel`: when it's missing, tell the user to run `pnpm i -g vercel` and stop.
 2. `vercel whoami`: when it isn't logged in, ask the user to run `vercel login` in a terminal (it opens a browser), then continue. Then `vercel teams ls`, and keep the slug of the "<username>'s projects" team as `SCOPE`.
-3. `kc url 2>/dev/null`: when a link already exists, run **Check** (section 6) first. When it answers 200 and no argument was given, compare the plugin's page with the deployed copy: `diff -rq -x .vercel -x .env.local -x .gitignore <this skill's base directory>/../../app/ $APP/`. When it lists a difference (a plugin update changed the page), run section 2 step 1, then section 4; the phone stays paired. When it lists none, report it and stop, since there's nothing to set up. With `pair`, go straight to section 5; with `--rotate`, run section 2 step 1, then section 3.
+3. `kc url 2>/dev/null`: when a link already exists, run **Check** (section 6) first. When it answers 200 and no argument was given, compare the plugin's page with the deployed copy: `diff -rq -x .vercel -x .env.local -x .gitignore <this skill's base directory>/../../app/ $APP/`. When it lists a difference (a plugin update changed the page), run section 2 step 1, then section 4; the phone stays paired. When it lists none, report it and stop, since there's nothing to set up. With `pair`, go straight to section 5; with `--rotate`, run section 2 step 1, then section 3; with `--forget-passkeys`, section 7.
 
 ## 2. Project and store
 
@@ -61,7 +61,7 @@ security add-generic-password -U -s claudio-slack-drafts-mobile -a url -w "https
 kc token | sed 's/^/Authorization: Bearer /' | curl -s -X POST -H @- "$(kc url)/api/drafts?action=pair-start"
 ```
 
-It answers `{"code":"123456","expiresIn":300}`: a six-digit code, good once, for five minutes. The token goes in through stdin, so it never reaches a URL or the chat. Give the user the code in the chat (it's fine to show; it is not the token), so they can pair from wherever they are, a Remote Control session on the phone included. Tell them, with the link clickable: open `https://<domain>` in Safari on the phone, tap Share, Add to Home Screen, open Slack Drafts from the home screen, and type the code there. Order matters: the home-screen app keeps its own storage, so a sign-in made in Safari doesn't carry over. The `pair` argument runs this section alone, for a new phone or after `--rotate`.
+It answers `{"code":"123456","expiresIn":300}`: a six-digit code, good once, for five minutes. The token goes in through stdin, so it never reaches a URL or the chat. Give the user the code in the chat (it's fine to show; it is not the token), so they can pair from wherever they are, a Remote Control session on the phone included. Tell them, with the link clickable: open `https://<domain>` in Safari on the phone, tap Share, Add to Home Screen, open Slack Drafts from the home screen, and type the code there. Order matters: the home-screen app keeps its own storage, so a sign-in made in Safari doesn't carry over. Then tell them to tap **Turn on Face ID sign-in** at the top of the page once: from then on any browser signs in with Face ID or Touch ID (the passkey syncs through iCloud Keychain), Chrome and a new home-screen app included, with no code. The `pair` argument runs this section alone, for a device without the passkey.
 
 ## 6. Check
 
@@ -73,9 +73,19 @@ echo "$code"; [ "$code" = 200 ] || head -c 300 "$TMPDIR/sdm-check"
 The body is shown only when the status isn't 200, so drafts never print; read it to pick the case below.
 
 - `200`: working. The mod picks up a new link or token within a minute, no reload needed.
-- `401`: the keychain and Vercel disagree. Run section 3 with `--rotate`, then 4 and 5.
+- `401`: the keychain and Vercel disagree. Run section 3 with `--rotate`, then 4. Devices with the passkey sign in again with Face ID; others need section 5.
 - `502` with "no Redis store": section 2 step 3.
 - A Vercel sign-in page (HTML, or a `401` that isn't JSON): Deployment Protection covers the production domain. Tell the user to turn it off for production in the project's Settings, Deployment Protection, and say why: the page has its own token.
+
+## 7. Forget passkeys
+
+For a lost device, or to start over: every passkey stops signing in. Devices already signed in stay signed in until `--rotate`.
+
+```bash
+kc token | sed 's/^/Authorization: Bearer /' | curl -s -X POST -H @- "$(kc url)/api/drafts?action=passkeys-forget"
+```
+
+It answers `{"forgot":"all passkeys"}`. To sign every device out as well, run `--rotate` too. Removing the passkey from the phone itself is in Settings, Passwords.
 
 ## Report
 

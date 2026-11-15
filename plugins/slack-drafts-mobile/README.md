@@ -17,8 +17,9 @@ The skill needs the Vercel CLI (`pnpm i -g vercel`) and a Vercel login. On your 
 2. Makes a token, keeps it in the macOS keychain, and sets it on the project.
 3. Deploys the page.
 4. Gives you a six-digit code in the chat. On the phone, open the page in Safari, tap Share, Add to Home Screen, open it from the home screen, and type the code there (the home-screen app keeps its own sign-in, apart from Safari's).
+5. Then tap **Turn on Face ID sign-in** at the top of the page once. After that, any browser signs in with Face ID or Touch ID, with no code: the passkey syncs through iCloud Keychain, so Chrome, Safari and a new home-screen app all use it.
 
-Run it again to check the setup (after a plugin update that changed the page, this also redeploys it; the phone stays paired), `/slack-drafts-mobile pair` for another phone, and `/slack-drafts-mobile --rotate` for a new token (phones then pair again).
+Run it again to check the setup (after a plugin update that changed the page, this also redeploys it; the phone stays paired), `/slack-drafts-mobile pair` for a code on a device without the passkey, `/slack-drafts-mobile --rotate` for a new token (devices then sign in again, with Face ID where they have it), and `/slack-drafts-mobile --forget-passkeys` to stop every passkey from signing in.
 
 ## How it syncs
 
@@ -27,7 +28,7 @@ Run it again to check the setup (after a plugin update that changed the page, th
 - A Sent or delete tap moves the file within 15 s while Claude Code is open on the Mac. With no session open, the tap waits on the page and the file moves when a session starts.
 - The mod only reads the page while a draft it pushed is still there, so an empty page costs no requests.
 
-The page never reaches the Mac: a tap only marks the draft, and the mod moves the file. The token lives in the keychain (service `claudio-slack-drafts-mobile`), never in a plain file. macOS only.
+The page never reaches the Mac: a tap only marks the draft, and the mod moves the file. The token lives in the keychain (service `claudio-slack-drafts-mobile`), never in a plain file. A passkey sign-in signs a one-time challenge after Face ID; the page keeps only the passkey's public key, added by a device that was already signed in. macOS only.
 
 ## Developing
 

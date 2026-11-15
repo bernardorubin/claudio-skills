@@ -50,6 +50,7 @@
   body { background: var(--bg); color: var(--fg); font: 16px/1.5 var(--body); padding-block: 20px 40px;
     padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   main { max-width: 600px; margin: 0 auto; display: grid; gap: 20px; }
+  [hidden] { display: none !important; } /* the button rule's display would otherwise show hidden buttons */
   header { display: grid; gap: 4px; }
   h1 { font: 900 1.625rem/1.15 var(--body); margin: 0; text-wrap: balance; }
   .lede { margin: 0; color: var(--muted); font-size: 0.9375rem; }
@@ -106,9 +107,12 @@
   .pair strong { font-size: 1.05rem; }
   .pair p { margin: 0; color: var(--muted); }
   .pair form { display: flex; gap: 8px; }
-  .pair input { font: 700 1.25rem/1 var(--mono); letter-spacing: 0.2em; min-height: 44px; padding: 0 12px; flex: 1 1 auto; min-width: 0;
+  .pair input { font: 700 1.25rem/1 var(--mono); letter-spacing: 0.2em; min-height: 44px; padding: 0 12px; flex: 1 1 auto; width: 0; min-width: 0;
     border: 1px solid var(--rule); border-radius: 8px; background: var(--bg); color: var(--fg); }
   .pair input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .pair .or { font-size: 0.875rem; }
+  .pair form button { flex: none; }
+  #passkey { justify-self: start; margin-top: 8px; }
 
   @media (prefers-reduced-motion: no-preference) {
     .draft { transition: border-color 0.2s; }
@@ -122,6 +126,8 @@
   <header>
     <h1>Slack Drafts</h1>
     <p class="lede" id="lede">Drafts from <code class="inline">/write-slack-message</code>, ready to paste into Slack with links and code intact.</p>
+    <button type="button" class="quiet" id="passkey" hidden></button>
+    <p class="status" id="passkey-status" role="status" hidden></p>
   </header>
   <div class="list" id="list">
     <div class="empty" id="empty">
@@ -284,9 +290,31 @@
     }
   };
 
-  // The token lives in this browser only: a phone gets it by trading the six-digit
-  // code /slack-drafts-mobile pair shows. A home-screen app keeps its own storage, apart from Safari's.
+  // The token lives in this browser only. A browser gets it with a passkey (Face ID, once a signed-in
+  // device added one) or by trading the six-digit code /slack-drafts-mobile pair shows.
+  // A home-screen app keeps its own storage, apart from Safari's.
   const TOKEN_KEY = 'slackDraftsToken';
+  const PASSKEY_KEY = 'slackDraftsPasskey'; // this browser added or used a passkey, so it needn't offer one
+  const canPasskey = !!(window.PublicKeyCredential && navigator.credentials);
+  const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  const PK = IOS ? 'Face ID' : 'a passkey'; // "Sign in with …"
+  const PK_ON = IOS ? 'Face ID sign-in' : 'passkey sign-in'; // "Turn on …"
+  const b64u = {
+    decode: s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(s.length / 4) * 4, '=')), c => c.charCodeAt(0)),
+    encode: buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
+  };
+  const post = async (action, body) => {
+    const r = await fetch('/api/drafts?action=' + action, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'the page answered ' + r.status);
+    return j;
+  };
+  const signedIn = t => {
+    token = t;
+    localStorage.setItem(TOKEN_KEY, token);
+    drawn = null;
+    load();
+  };
   let token = localStorage.getItem(TOKEN_KEY) || '';
   const api = (method, query = '', body) => fetch('/api/drafts' + query, {
     method,
@@ -305,11 +333,77 @@
     return box;
   };
 
+  // The passkey's own key never leaves the device: the page hands out a one-time challenge,
+  // the device signs it after Face ID, and the server checks the signature against the key it was given.
+  const signInWithPasskey = async status => {
+    try {
+      const { challenge } = await post('passkey-challenge', {});
+      const cred = await navigator.credentials.get({ publicKey: { challenge: b64u.decode(challenge), rpId: location.hostname, userVerification: 'required' } });
+      const r = cred.response;
+      const j = await post('passkey-signin', {
+        id: cred.id,
+        clientDataJSON: b64u.encode(r.clientDataJSON),
+        authenticatorData: b64u.encode(r.authenticatorData),
+        signature: b64u.encode(r.signature),
+      });
+      localStorage.setItem(PASSKEY_KEY, '1');
+      signedIn(j.token);
+    } catch (e) {
+      say(status, false, e && e.name === 'NotAllowedError'
+        ? 'No passkey was used. If none is set up yet, sign in with a code below, then tap Turn on ' + PK_ON + '.'
+        : 'Could not sign in (' + why(e) + ').');
+    }
+  };
+
+  // Made on a signed-in device. The token proves who is adding it, so the server takes the key
+  // without checking an attestation; the challenge here only satisfies the browser.
+  const addPasskey = async () => {
+    const btn = document.getElementById('passkey');
+    const status = document.getElementById('passkey-status');
+    status.hidden = false;
+    try {
+      const cred = await navigator.credentials.create({ publicKey: {
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        rp: { name: 'Slack Drafts', id: location.hostname },
+        // one fixed user, so adding again replaces this site's passkey instead of piling up more
+        user: { id: new TextEncoder().encode('slack-drafts-owner'), name: 'Slack Drafts', displayName: 'Slack Drafts' },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+        authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
+      } });
+      const spki = cred.response.getPublicKey ? cred.response.getPublicKey() : null;
+      if (!spki) throw new Error('this browser cannot add a passkey');
+      const r = await api('POST', '?action=passkey-add', { id: cred.id, spki: b64u.encode(spki), alg: cred.response.getPublicKeyAlgorithm() });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      localStorage.setItem(PASSKEY_KEY, '1');
+      btn.hidden = true;
+      say(status, true, (IOS ? 'Face ID' : 'Passkey') + ' sign-in is on. Any browser with your passkeys (iCloud Keychain or your password manager) now signs in with it.');
+    } catch (e) {
+      say(status, false, e && e.name === 'NotAllowedError' ? 'Cancelled. Tap again when you are ready.' : 'Could not turn it on (' + why(e) + ').');
+    }
+  };
+  document.getElementById('passkey').addEventListener('click', addPasskey);
+  const offerPasskey = () => {
+    const btn = document.getElementById('passkey');
+    btn.textContent = 'Turn on ' + PK_ON;
+    btn.hidden = !canPasskey || !token || localStorage.getItem(PASSKEY_KEY) === '1';
+  };
+
   const showPairForm = note => {
     const app = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
-    lede.textContent = app ? 'Sign this phone in once with a code from Claude Code.'
+    lede.textContent = app || canPasskey
+      ? 'Sign in once on this device.'
       : 'Add this page to your Home Screen first (Share, Add to Home Screen), open it from there, then enter the code. A sign-in here in Safari does not carry over.';
-    const box = panel('Enter your code', note || 'Run /slack-drafts-mobile pair in Claude Code for a six-digit code.');
+    offerPasskey();
+    const box = panel('Sign in', note || (canPasskey
+      ? 'Use ' + PK + ' once any signed-in device turned it on. Or enter a six-digit code from /slack-drafts-mobile pair in Claude Code.'
+      : 'Run /slack-drafts-mobile pair in Claude Code for a six-digit code.'));
+    if (canPasskey) {
+      const pk = document.createElement('button'); pk.type = 'button'; pk.className = 'primary'; pk.textContent = 'Sign in with ' + PK;
+      const pkStatus = document.createElement('p'); pkStatus.className = 'status'; pkStatus.setAttribute('role', 'status');
+      pk.addEventListener('click', () => signInWithPasskey(pkStatus));
+      const or = document.createElement('p'); or.className = 'or'; or.textContent = 'Or with a code:';
+      box.append(pk, pkStatus, or);
+    }
     const form = document.createElement('form');
     const input = document.createElement('input');
     Object.assign(input, { inputMode: 'numeric', autocomplete: 'one-time-code', maxLength: 6, placeholder: '000000', required: true });
@@ -321,18 +415,12 @@
     form.addEventListener('submit', async ev => {
       ev.preventDefault();
       try {
-        const r = await fetch('/api/drafts?action=pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: input.value }) });
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok || !j.token) throw new Error(j.error || 'the page answered ' + r.status);
-        token = j.token;
-        localStorage.setItem(TOKEN_KEY, token);
-        drawn = null;
-        load();
+        signedIn((await post('pair', { code: input.value })).token);
       } catch (e) {
         say(status, false, 'Could not sign in (' + why(e) + ').');
       }
     });
-    input.focus();
+    if (!canPasskey) input.focus();
   };
 
   const load = async () => {
@@ -342,9 +430,10 @@
       if (r.status === 401) {
         token = '';
         localStorage.removeItem(TOKEN_KEY);
-        return showPairForm('This phone was signed out, maybe after a new token. Run /slack-drafts-mobile pair in Claude Code for a new code.');
+        return showPairForm('This device was signed out, maybe after a new token. Sign in again: ' + (canPasskey ? PK + ', or a new code from /slack-drafts-mobile pair.' : 'run /slack-drafts-mobile pair in Claude Code for a new code.'));
       }
       if (!r.ok) throw new Error('HTTP ' + r.status);
+      offerPasskey();
       const rows = (await r.json()).drafts || [];
       const live = rows.filter(x => x && x.state === 'open' && typeof x.name === 'string')
         .map(x => ({ name: x.name, md: String(x.md || ''), savedAt: x.savedAt || 0 }))
