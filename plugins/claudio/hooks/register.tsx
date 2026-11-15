@@ -91,6 +91,33 @@ const pruneSent = async ($: EngineInterface, days: number) => {
   await Promise.all(old.map(f => moveToTrash($, { name: f.name, path: `${dir}/${f.name}`, mtimeMs: f.mtimeMs, text: '' })))
 }
 
+// A read of the page comes back as one JSON document per line between two marker lines.
+type Row = { name: string; deleted?: unknown; sent?: unknown; savedAt?: unknown }
+const rowsOf = (text: string): Row[] =>
+  text.split('\n').flatMap(line => {
+    if (!line.startsWith('{')) return []
+    try {
+      const { data } = JSON.parse(line) as { data?: { name?: unknown; deleted?: unknown; sent?: unknown; savedAt?: unknown } }
+      return typeof data?.name === 'string' ? [{ ...data, name: data.name }] : []
+    } catch {
+      return []
+    }
+  })
+
+// The drafts a page still shows: each name whose newest row is not a tombstone.
+// ponytail: one read of up to 1000 rows; the page deletes superseded rows itself, so that covers it
+const liveOn = async ($: EngineInterface, url: string) => {
+  const input = { action: 'query' as const, url, collection: 'drafts', query: { where: [['savedAt', '>=', 0]], limit: 1000 } }
+  const r = await $.tool.call({ tool: 'ArtifactData', ...input }).catch(() => null)
+  if (r === null || r.deny !== undefined || r.isError) return []
+  const newest = new Map<string, { at: number; deleted: boolean }>()
+  for (const row of rowsOf(r.text ?? '')) {
+    const at = Number(row.savedAt) || 0
+    if (at >= (newest.get(row.name)?.at ?? -1)) newest.set(row.name, { at, deleted: row.deleted === true })
+  }
+  return [...newest].filter(([, v]) => !v.deleted).map(([name]) => name)
+}
+
 // A delete or a Sent on the phone page adds a tombstone marked from: 'phone' (Sent
 // adds sent: true). The Mac trashes the file or moves it to sent/, and the tombstone
 // syncPhone then writes tells the page to tidy both away.
@@ -114,18 +141,11 @@ const pullPhoneDeletes = async ($: EngineInterface, url: string, quiet: boolean,
   const r = await $.tool.call({ tool: 'ArtifactData', ...input })
   if (r.deny !== undefined) return
   if (r.isError) return /no such artifact/i.test(r.text ?? '') ? 'gone' : undefined
-  // the read comes back as one JSON document per line between two marker lines
   const latest = new Map<string, { at: number; sent: boolean }>()
-  for (const line of (r.text ?? '').split('\n')) {
-    if (!line.startsWith('{')) continue
-    try {
-      const { data } = JSON.parse(line) as { data?: { name?: unknown; deleted?: unknown; sent?: unknown; savedAt?: unknown } }
-      if (data?.deleted !== true || typeof data.name !== 'string') continue
-      const at = Number(data.savedAt) || 0
-      if (at >= (latest.get(data.name)?.at ?? -1)) latest.set(data.name, { at, sent: data.sent === true })
-    } catch {
-      continue
-    }
+  for (const row of rowsOf(r.text ?? '')) {
+    if (row.deleted !== true) continue
+    const at = Number(row.savedAt) || 0
+    if (at >= (latest.get(row.name)?.at ?? -1)) latest.set(row.name, { at, sent: row.sent === true })
   }
   // a draft saved again on the Mac after the phone deleted it stays
   const doomed = (await refresh($)).filter(d => (latest.get(d.name)?.at ?? -1) >= d.mtimeMs)
@@ -150,11 +170,15 @@ const docId = (name: string, at: number) =>
 // Returns what happened, for /slack-drafts to say; failures also toast unless `quiet` (the idle push).
 const syncPhone = async ($: EngineInterface, url: string, list: Draft[], quiet = false): Promise<string> => {
   if (!url) return 'no phone page yet'
-  // a new page starts empty, so the record of what was sent counts only for the page it was sent to
-  const synced = ((await $.store.get('syncedUrl')) === url ? ((await $.store.get('synced')) ?? {}) : {}) as Record<string, number>
+  // The record of what was sent counts only for the page it was sent to. Any other page (a new one,
+  // or an older one findPage adopted) is read for the drafts it still shows, so a draft sent or
+  // trashed since gets its tombstone instead of showing again as unsent.
+  const known = (await $.store.get('syncedUrl')) === url
+  const synced = (known ? ((await $.store.get('synced')) ?? {}) : {}) as Record<string, number>
+  const held = known ? Object.keys(synced) : await liveOn($, url)
   const now = Date.now()
   const changed = list.filter(d => synced[d.name] !== d.mtimeMs)
-  const gone = Object.keys(synced).filter(name => !list.some(d => d.name === name))
+  const gone = held.filter(name => !list.some(d => d.name === name))
   if (changed.length === 0 && gone.length === 0) return 'phone page up to date'
   const writes = [
     ...changed.map(d => ({ op: 'set' as const, collection: 'drafts', doc_id: docId(d.name, now), data: { name: d.name, md: d.text, savedAt: d.mtimeMs } })),
@@ -190,38 +214,33 @@ const newPagePrompt = (root: string) =>
 // ponytail: a 2-minute hold between publish requests; a declined or failed publish can be retried after it
 const ASK_MS = 120_000
 
-// The page is found, not configured: the person's own artifact named Slack Drafts. The link is
-// cached in a plain file every session, write-slack-message and phone-page-allow.py read, so a
-// session that can't list artifacts still syncs to the page another session found or published.
+// The page is found, not configured: the person's own artifact named Slack Drafts. Its link lives
+// in the store every session shares. The file only mirrors it for write-slack-message and
+// phone-page-allow.py and is never read back, so a write to the file can't redirect the drafts.
 const ARTIFACT_URL = /^https:\/\/claude\.ai\/\S*artifact\/[\w-]+$/
-const linkFileOf = async ($: EngineInterface) => `${await home($)}/.config/claudio/slack-drafts-phone-url`
 const readLink = async ($: EngineInterface) => {
-  const text = (await $.fs.read(await linkFileOf($)).catch(() => '')).trim()
-  return ARTIFACT_URL.test(text) ? text : ''
+  const url = String((await $.store.get('phonePage')) ?? '')
+  return ARTIFACT_URL.test(url) ? url : ''
 }
 const writeLink = async ($: EngineInterface, url: string) => {
-  if ((await readLink($)) === url) return
-  const file = await linkFileOf($)
-  await $.process.run(['mkdir', '-p', file.slice(0, file.lastIndexOf('/'))])
-  await $.fs.write(file, url ? `${url}\n` : '')
+  await $.store.set('phonePage', url)
+  await $.fs.write(`${await home($)}/.config/claudio/slack-drafts-phone-url`, `${url}\n`)
 }
 
-// Before the cache file existed (4.25 and earlier), the store's last synced page was the page.
+// The saved link (a page another session found or published since), else the one this session holds.
+const currentLink = async ($: EngineInterface, held: string) => (await readLink($).catch(() => '')) || held
+
+// Before 4.26 the store's last synced page was the page.
 const seedLink = async ($: EngineInterface) => (await readLink($)) || String((await $.store.get('syncedUrl')) ?? '')
 
 // "- (mine, pinned) Slack Drafts — https://claude.ai/artifact/<id> — updated <date>", one line per page
 const LISTED = /^- \(mine(, pinned)?\) Slack Drafts — (https:\/\/claude\.ai\/\S*artifact\/[\w-]+)/gm
 // The person's own Slack Drafts pages, pinned first, each group most recent first; null when this
-// session can't list them (no artifact tools, or the call was refused).
+// session can't list them (no artifact tools, a refused call, or a tool error).
+// ponytail: one listing of 200, most recent first; follow page_token if the page is ever missed
 const listPages = async ($: EngineInterface): Promise<string[] | null> => {
-  // a session without the tool can throw before any promise exists, so the call sits in a try
-  let r
-  try {
-    r = await $.tool.call({ tool: 'Artifact', action: 'list', scope: 'mine', limit: 200 })
-  } catch {
-    return null
-  }
-  if (r.deny !== undefined || r.isError) return null
+  const r = await $.tool.call({ tool: 'Artifact', action: 'list', scope: 'mine', limit: 200 }).catch(() => null)
+  if (r === null || r.deny !== undefined || r.isError) return null
   const found = [...(r.text ?? '').matchAll(LISTED)].map(m => ({ url: m[2] ?? '', pinned: m[1] !== undefined }))
   return [...found.filter(f => f.pinned), ...found.filter(f => !f.pinned)].map(f => f.url)
 }
@@ -229,12 +248,18 @@ const listPages = async ($: EngineInterface): Promise<string[] | null> => {
 // The page in use while the listing still shows it, else the listed one. A listing that shows
 // none keeps the link: only a read of the page (pullPhoneDeletes' 'gone') says it no longer opens,
 // so a change to the listing's wording can't drop a working page and publish a second one.
+// `listed` is false when this session couldn't look.
 const findPage = async ($: EngineInterface, held: string) => {
-  const current = (await readLink($)) || held
   const pages = await listPages($)
+  // read after the listing, so a page another session saved meanwhile is not overwritten
+  const current = (await readLink($).catch(() => '')) || held
   const url = pages === null || pages.length === 0 || pages.includes(current) ? current : (pages[0] ?? current)
-  await writeLink($, url).catch(() => undefined)
-  return url
+  if (url !== '') {
+    await writeLink($, url).catch((e: unknown) =>
+      $.ui.toast(`claudio: could not save the phone page link: ${e instanceof Error ? e.message : String(e)}`),
+    )
+  }
+  return { url, listed: pages !== null }
 }
 
 // "Published <file> at <url> (Version 1, ...)": the link of a publish of the phone page, or null.
@@ -380,9 +405,10 @@ export const register: Register = (on, options) => {
     // one mod failing to start must not keep the others from starting
     const failed = (
       await Promise.allSettled([
-        findPage($, phoneUrl).then(url => void (phoneUrl = url)),
-        // the cache file carries a page another session found or published since
-        startSlackDrafts($, async () => (phoneUrl = (await readLink($).catch(() => '')) || phoneUrl), sentDays, idleSync),
+        // on a timer: the first session.start holds turn one, the listing goes over the network, and a
+        // call left running after this hook returns is dropped with it
+        $.clock.after(0, () => void findPage($, phoneUrl).then(found => void (phoneUrl = found.url)).catch(() => undefined)),
+        startSlackDrafts($, async () => (phoneUrl = await currentLink($, phoneUrl)), sentDays, idleSync),
         (showUsage || showPet) && startUsageBars($),
         showPet && startPet($),
         nudgeVault($),
@@ -404,21 +430,17 @@ export const register: Register = (on, options) => {
     return own && r.decision === 'ask' ? { decision: 'allow' as const } : r
   })
 
-  // Likewise this mod's own listing of the person's artifacts, which finds the page.
-  on('tool.check', { tool: 'Artifact' }, async ($, e, next) => {
-    const r = await next(e)
-    const own = next.origin.plugin === $.plugin.name && (e.input as { action?: unknown }).action === 'list'
-    return own && r.decision === 'ask' ? { decision: 'allow' as const } : r
-  })
-
   // With no phone page found, or one that no longer opens, Claude publishes a new one.
   // The .catch answers when anything else fails, so the command never goes unanswered.
   on('command.run', { command: 'slack-drafts' }, async $ => {
-    phoneUrl = await findPage($, phoneUrl)
+    const found = await findPage($, phoneUrl)
+    phoneUrl = found.url
     const pulled = await pullPhoneDeletes($, phoneUrl, false).catch(() => undefined)
     const list = await refresh($)
     await open($, true)
     const count = `${list.length} draft${list.length === 1 ? '' : 's'} in the pane`
+    // a failed look is not "none": publishing then would leave the phone's pin on the old page
+    if (phoneUrl === '' && !found.listed) return { text: `${count}; this session could not list your artifacts to look for the phone page, so none was published. Run /slack-drafts again in a session that has the Artifact tool.` }
     if (phoneUrl === '' || pulled === 'gone') {
       // one request at a time across sessions, so a second run before the publish lands makes no second page
       const now = await $.clock.now()
@@ -443,9 +465,10 @@ export const register: Register = (on, options) => {
   // changed one opens the pane; any call reads the phone page's Sent and trash
   // taps (at most every 30s), alongside the tool.
   on('tool.call', async ($, e, next) => {
-    // the cache file carries a page another session found or published since
-    const pulling = readLink($)
-      .then(url => pullPhoneDeletes($, (phoneUrl = url || phoneUrl), true))
+    // this mod's own calls (the listing, the page's reads and syncs) need no pull or pet of their own
+    if (next.origin.plugin === $.plugin.name) return next(e)
+    const pulling = currentLink($, phoneUrl)
+      .then(url => pullPhoneDeletes($, (phoneUrl = url), true))
       .catch(() => undefined)
     const isDraft = e.tool !== 'ArtifactData' && JSON.stringify(e).includes('slack-drafts')
     if (!showPet && !isDraft) return next(e).finally(() => pulling)
@@ -471,15 +494,16 @@ export const register: Register = (on, options) => {
     // a publish of the phone page (the /slack-drafts republish, or one by hand) becomes the page drafts go to
     const published = e.tool === 'Artifact' ? publishedPhoneUrl(e.file_path, ran.text) : null
     if (published !== null && published !== phoneUrl) {
-      phoneUrl = published
-      // A publish arms a comment watch in this session. The page needs none, and a session
-      // resumed without the artifact tools reports every watch it can't resume.
-      await $.tool.call({ tool: 'ArtifactComments', action: 'watch', url: published, on: false }).catch(() => undefined)
+      // saved first: every tool call and 30s tick reads the store into phoneUrl
       const why = await writeLink($, published).then(
         () => undefined,
         (e: unknown) => (e instanceof Error ? e.message : String(e)),
       )
-      $.ui.toast(why === undefined ? 'New phone page saved; drafts go there now' : `New phone page in use, but its link was not saved for other sessions: ${why}`)
+      phoneUrl = published
+      // A publish arms a comment watch in this session. The page needs none, and a session
+      // resumed without the artifact tools reports every watch it can't resume.
+      await $.tool.call({ tool: 'ArtifactComments', action: 'watch', url: published, on: false }).catch(() => undefined)
+      $.ui.toast(why === undefined ? 'New phone page saved; drafts go there now' : `New phone page published, but its link could not be saved: ${why}`)
     }
     const list = await refresh($)
     if ((list[0]?.mtimeMs ?? 0) > newest) void open($, false)

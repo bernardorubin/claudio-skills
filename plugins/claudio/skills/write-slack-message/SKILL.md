@@ -257,8 +257,8 @@ the Slack Drafts phone page, whose Copy for Slack keeps links and code.
 
 So when the user says they are on their phone, on the road, or away from their
 laptop, save exactly as above and change only the report line: link the phone
-page instead of giving the path. The mod finds the page (your own pinned
-"Slack Drafts" artifact) and keeps its link here:
+page instead of giving the path. The mod finds the page (your own
+"Slack Drafts" artifact, pinned first) and keeps a copy of its link here:
 
 ```bash
 cat ~/.config/claudio/slack-drafts-phone-url 2>/dev/null
