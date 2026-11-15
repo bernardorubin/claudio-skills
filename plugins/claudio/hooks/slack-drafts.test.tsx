@@ -1,3 +1,4 @@
+import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 import { clipboardScript } from './slack-html'
@@ -215,4 +216,112 @@ test('/slack-drafts opens the pane and says how many drafts it holds', async ($,
   const r = await $.command.run({ command: 'slack-drafts', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
   expect(JSON.stringify(r)).toContain('1 draft in the pane')
   expect(opened).toEqual(['slack-drafts'])
+})
+
+type File = { name: string; kind: 'file'; size: number; mtimeMs: number; isLink: boolean }
+const file = (name: string, mtimeMs = 100): File => ({ name, kind: 'file', size: 1, mtimeMs, isLink: false })
+
+test('a draft saved by any tool opens the pane; other calls leave it shut', async ($, on) => {
+  let files: File[] = []
+  const opened: unknown[] = []
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', ($, e) => ({ value: e.path === DIR ? files : [] }))
+  on('fs.read', () => ({ value: DRAFT }))
+  on('ui.open', ($, e) => {
+    opened.push(e.id)
+    return { value: { isPlaced: true as const } }
+  })
+  on('tool.call', ($, e) => {
+    if (e.tool === 'Write') files = [file('nick-1027-1202.md')]
+    return { result: {}, text: '' }
+  })
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  await $.tool.call({ tool: 'Read', file_path: '/Users/test/notes.md' })
+  expect(opened).toEqual([])
+  await $.tool.call({ tool: 'Write', file_path: `${DIR}/nick-1027-1202.md`, content: DRAFT })
+  expect(opened).toEqual(['slack-drafts'])
+})
+
+test('a draft moved away mid-read drops out instead of failing the list', async ($, on) => {
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', ($, e) => ({ value: e.path === DIR ? [file('gone-1027-1200.md', 200), file('nick-1027-1202.md')] : [] }))
+  on('fs.read', ($, e) => {
+    if (e.path.endsWith('gone-1027-1200.md')) throw new Error('ENOENT: no such file or directory')
+    return { value: DRAFT }
+  })
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+  on('ui.render', ($, e) => {
+    const { Box } = $.ui.resolve(e)
+    return <Box key="engine" />
+  })
+
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  const r = await $.command.run({ command: 'slack-drafts', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
+  expect(JSON.stringify(r)).toContain('1 draft in the pane')
+  const ui = await $.ui.mount({ plugin: 'claudio', surface: 'desktop', ...PANE })
+  expect(await ui.find({ key: 'del-nick-1027-1202.md' })).toBeDefined()
+  expect(await ui.find({ key: 'del-gone-1027-1200.md' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('/slack-drafts says where the drafts are when no pane is placed', async ($, on) => {
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', ($, e) => ({ value: e.path === DIR ? [file('nick-1027-1202.md')] : [] }))
+  on('fs.read', () => ({ value: DRAFT }))
+  on('ui.open', () => ({ value: { isPlaced: false as const, reason: 'no-surface' } }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  await $.session.start({ cwd: '/Users/test', surface: 'mobile', isInteractive: true })
+  const r = await $.command.run({ command: 'slack-drafts', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
+  expect(JSON.stringify(r)).toContain("1 draft in ~/Desktop/slack-drafts; the pane isn't shown here: no-surface")
+})
+
+// `$.store` in memory, readable by the test.
+const memStore = (on: On, entries: Record<string, unknown>) => {
+  const m = new Map<string, unknown>(Object.entries(entries))
+  on('store.get', ($, e) => ({ value: m.get(e.key) }))
+  on('store.set', ($, e) => {
+    m.set(e.key, e.value)
+    return { value: undefined }
+  })
+  on('store.delete', ($, e) => {
+    m.delete(e.key)
+    return { value: undefined }
+  })
+  return m
+}
+
+test('an upgrade from the artifact phone page says so once and clears what it left', async ($, on) => {
+  const store = memStore(on, { phonePage: 'https://claude.ai/artifact/x', syncedPages: { 'https://claude.ai/artifact/x': {} }, phonePulledAt: 1 })
+  const runs: string[][] = []
+  const toasts: string[] = []
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', () => ({ value: [] }))
+  on('fs.read', () => ({ value: '{}' }))
+  on('process.run', ($, e) => {
+    runs.push([...e.argv])
+    return { value: ok }
+  })
+  on('ui.toast', ($, e) => {
+    toasts.push(String(e.text))
+    return { value: undefined }
+  })
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  expect(toasts.filter(t => t.includes('retired the claude.ai phone page')).length).toBe(1)
+  const mv = runs.find(r => r[0] === 'mv' && r[1] === '/Users/test/.config/claudio/slack-drafts-phone-url')
+  expect(String(mv?.[2])).toStartWith('/Users/test/.Trash/')
+  expect(['phonePage', 'syncedPages', 'phonePulledAt'].filter(key => store.has(key))).toEqual([])
+
+  // the next session has nothing left to retire
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  expect(toasts.filter(t => t.includes('retired the claude.ai phone page')).length).toBe(1)
 })

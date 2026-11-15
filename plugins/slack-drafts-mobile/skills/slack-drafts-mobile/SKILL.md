@@ -27,7 +27,7 @@ kc() { security find-generic-password -s claudio-slack-drafts-mobile -a "$1" -w;
 
 1. `command -v vercel`: when it's missing, tell the user to run `pnpm i -g vercel` and stop.
 2. `vercel whoami`: when it isn't logged in, ask the user to run `vercel login` in a terminal (it opens a browser), then continue. Then `vercel teams ls`, and keep the slug of the "<username>'s projects" team as `SCOPE`.
-3. `kc url 2>/dev/null`: when a link already exists, run **Check** (section 6) first. When it answers 200 and no argument was given, report it and stop, since there's nothing to set up. With `pair`, go straight to section 5; with `--rotate`, to section 3.
+3. `kc url 2>/dev/null`: when a link already exists, run **Check** (section 6) first. When it answers 200 and no argument was given, compare the plugin's page with the deployed copy: `diff -rq -x .vercel -x .env.local -x .gitignore <this skill's base directory>/../../app/ $APP/`. When it lists a difference (a plugin update changed the page), run section 2 step 1, then section 4; the phone stays paired. When it lists none, report it and stop, since there's nothing to set up. With `pair`, go straight to section 5; with `--rotate`, run section 2 step 1, then section 3.
 
 ## 2. Project and store
 

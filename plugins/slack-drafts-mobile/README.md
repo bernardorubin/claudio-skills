@@ -18,7 +18,7 @@ The skill needs the Vercel CLI (`pnpm i -g vercel`) and a Vercel login. On your 
 3. Deploys the page.
 4. Gives you a six-digit code in the chat. On the phone, open the page in Safari, tap Share, Add to Home Screen, open it from the home screen, and type the code there (the home-screen app keeps its own sign-in, apart from Safari's).
 
-Run it again to check the setup, `/slack-drafts-mobile pair` for another phone, and `/slack-drafts-mobile --rotate` for a new token (phones then pair again).
+Run it again to check the setup (after a plugin update that changed the page, this also redeploys it; the phone stays paired), `/slack-drafts-mobile pair` for another phone, and `/slack-drafts-mobile --rotate` for a new token (phones then pair again).
 
 ## How it syncs
 

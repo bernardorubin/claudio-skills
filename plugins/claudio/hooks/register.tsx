@@ -29,9 +29,14 @@ const refresh = async ($: EngineInterface) => {
   const mds = entries.filter(f => f.kind === 'file' && f.name.endsWith('.md')).sort((a, b) => b.mtimeMs - a.mtimeMs)
   const held = await read($, drafts)
   if (signature(mds) === signature(held)) return held
-  const list: Draft[] = await Promise.all(
-    mds.map(async f => ({ name: f.name, path: `${dir}/${f.name}`, mtimeMs: f.mtimeMs, text: await $.fs.read(`${dir}/${f.name}`) })),
+  // a draft moved between the listing and the read (another session, the phone mod) drops out until the next poll
+  const found = await Promise.all(
+    mds.map(async f => {
+      const text = await $.fs.read(`${dir}/${f.name}`).catch(() => null)
+      return text === null ? [] : [{ name: f.name, path: `${dir}/${f.name}`, mtimeMs: f.mtimeMs, text }]
+    }),
   )
+  const list: Draft[] = found.flat()
   await update($, drafts, () => list)
   return list
 }
@@ -124,6 +129,18 @@ const nudgePet = async ($: EngineInterface) => {
     timeoutMs: 15_000,
   })
   await $.store.set('petNudged', true)
+}
+
+// 5.0.0 retired the claude.ai phone page; anyone who had one hears it once, and its link copy goes to the Trash.
+const OLD_PHONE_KEYS = ['phonePage', 'syncedPages', 'syncedUrl', 'synced', 'phonePulledAt', 'phoneAskedAt']
+const retirePhonePage = async ($: EngineInterface) => {
+  if (!(await $.store.get('phonePage')) && !(await $.store.get('syncedUrl'))) return
+  await Promise.all(OLD_PHONE_KEYS.map(key => $.store.delete(key)))
+  const h = await home($)
+  await $.process.run(['mv', `${h}/.config/claudio/slack-drafts-phone-url`, `${h}/.Trash/slack-drafts-phone-url ${Date.now()}`]).catch(() => undefined)
+  $.ui.toast('claudio 5.0.0 retired the claude.ai phone page. For drafts on your phone: /plugin install slack-drafts-mobile@claudio, then /slack-drafts-mobile', {
+    timeoutMs: 15_000,
+  })
 }
 
 // ── update check: a newer published claudio than this install ──
@@ -225,6 +242,7 @@ export const register: Register = (on, options) => {
         (showUsage || showPet) && startUsageBars($),
         showPet && startPet($),
         nudgeVault($),
+        retirePhonePage($),
         startUpdateCheck($, showPet),
         !showPet && nudgePet($),
       ])
@@ -235,8 +253,9 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'slack-drafts' }, async $ => {
     const list = await refresh($)
-    await open($, true)
-    return { text: `${list.length} draft${list.length === 1 ? '' : 's'} in the pane` }
+    const placed = await open($, true)
+    const count = `${list.length} draft${list.length === 1 ? '' : 's'}`
+    return { text: placed.isPlaced ? `${count} in the pane` : `${count} in ~/Desktop/slack-drafts; the pane isn't shown here: ${placed.reason}` }
   }).catch(() => ({ text: 'The drafts pane could not be opened from this session.' })) // never leave the command unanswered
 
   // The one unmatched tool.call hook the engine allows, for both mods. The pet:
