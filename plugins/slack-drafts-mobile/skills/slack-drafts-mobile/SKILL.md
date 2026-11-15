@@ -7,7 +7,7 @@ description: Set up, check, re-pair or re-key the Slack Drafts phone page, a sma
 
 Deploys this plugin's `app/` to the user's **own personal Vercel account**, connects a free Upstash Redis store, and keeps the page's link and token in the macOS keychain, where this plugin's mod reads them. Re-running it is safe: every step checks what is already there.
 
-The mod then syncs on its own, in every Claude Code session: a draft saved to `~/Desktop/slack-drafts` is on the page within 3 s, and a Sent or delete tap on the phone moves the file within 5 s (`sent/` or the Trash), while Claude Code is open on the Mac.
+The mod then syncs on its own, in every Claude Code session: a draft saved to `~/Desktop/slack-drafts` is on the page within 3 s, and a Sent or delete tap on the phone moves the file within 15 s (`sent/` or the Trash), while Claude Code is open on the Mac.
 
 ## Rules
 

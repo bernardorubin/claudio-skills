@@ -109,7 +109,7 @@ test('Sent on the phone moves the file into sent/, deletes it from the page and 
     reply: c => ({ status: 200, text: c.method === 'GET' ? JSON.stringify({ drafts: [{ name: NAME, state: 'sent', actedAt: 500 }] }) : '{}' }),
   })
   await $.session.start(SESSION)
-  await clock.advance(5_000)
+  await clock.advance(15_000)
   await clock.advance(1_000)
   expect(runs).toContainEqual(['mv', `${DIR}/${NAME}`, `${DIR}/sent/${NAME}`])
   expect(calls.some(c => c.method === 'DELETE' && c.url.endsWith(`?name=${NAME}`))).toBe(true)
@@ -128,7 +128,7 @@ test('a delete on the phone goes to the Trash, but a draft saved again after the
     }),
   })
   await $.session.start(SESSION)
-  await clock.advance(5_000)
+  await clock.advance(15_000)
   await clock.advance(1_000)
   expect(runs.some(r => r[0] === 'mv' && r[1] === `${DIR}/${NAME}` && String(r[2]).startsWith('/Users/test/.Trash/'))).toBe(true)
   expect(runs.some(r => r[0] === 'mv' && r[1] === `${DIR}/${EDITED}`)).toBe(false)
@@ -193,7 +193,7 @@ test('a move that fails keeps the row on the page and says so', async ($, on) =>
     reply: c => ({ status: 200, text: c.method === 'GET' ? JSON.stringify({ drafts: [{ name: NAME, state: 'sent', actedAt: 500 }] }) : '{}' }),
   })
   await $.session.start(SESSION)
-  await clock.advance(5_000)
+  await clock.advance(15_000)
   await clock.advance(1_000)
   expect(calls.some(c => c.method === 'DELETE')).toBe(false)
   expect(toasts.some(t => t.includes(`could not move ${NAME}`))).toBe(true)

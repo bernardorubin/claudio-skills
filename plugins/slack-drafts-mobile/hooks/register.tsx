@@ -8,7 +8,8 @@ import type { EngineInterface, HttpResponse, Register } from 'claude-code'
 
 const SERVICE = 'claudio-slack-drafts-mobile'
 const PUSH_MS = 3_000
-const PULL_MS = 5_000
+// 15 s keeps an always-on Mac to about 173K Upstash commands a month; the free plan allows 500K
+const PULL_MS = 15_000
 const LINK_MS = 60_000
 
 type File = { name: string; path: string; mtimeMs: number }
@@ -112,7 +113,7 @@ const push = async ($: EngineInterface, s: Sync, l: Link) => {
   await $.store.set('pushed', next)
 }
 
-// Reads the phone's taps every 5 s while a pushed draft is on the page, one session at a time (the shared stamp).
+// Reads the phone's taps every 15 s while a pushed draft is on the page, one session at a time (the shared stamp).
 const pull = async ($: EngineInterface, s: Sync, l: Link) => {
   if (Object.keys(await pushedOf($)).length === 0) return
   const now = await $.clock.now()

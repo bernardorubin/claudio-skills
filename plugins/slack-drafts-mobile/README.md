@@ -24,7 +24,7 @@ Run it again to check the setup, `/slack-drafts-mobile pair` for another phone, 
 
 - A saved draft reaches the page within 3 s.
 - The page refreshes every 15 s and whenever you return to it.
-- A Sent or delete tap moves the file within 5 s while Claude Code is open on the Mac. With no session open, the tap waits on the page and the file moves when a session starts.
+- A Sent or delete tap moves the file within 15 s while Claude Code is open on the Mac. With no session open, the tap waits on the page and the file moves when a session starts.
 - The mod only reads the page while a draft it pushed is still there, so an empty page costs no requests.
 
 The page never reaches the Mac: a tap only marks the draft, and the mod moves the file. The token lives in the keychain (service `claudio-slack-drafts-mobile`), never in a plain file. macOS only.
