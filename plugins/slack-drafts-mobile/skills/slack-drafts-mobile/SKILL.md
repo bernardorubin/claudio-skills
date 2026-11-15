@@ -27,7 +27,7 @@ kc() { security find-generic-password -s claudio-slack-drafts-mobile -a "$1" -w;
 
 1. `command -v vercel`: when it's missing, tell the user to run `pnpm i -g vercel` and stop.
 2. `vercel whoami`: when it isn't logged in, ask the user to run `vercel login` in a terminal (it opens a browser), then continue. Then `vercel teams ls`, and keep the slug of the "<username>'s projects" team as `SCOPE`.
-3. `kc url 2>/dev/null`: when a link already exists, run **Check** (section 6) first. When it answers 200 and no argument was given, compare the plugin's page with the deployed copy: `diff -rq -x .vercel -x .env.local -x .gitignore <this skill's base directory>/../../app/ $APP/`. When it lists a difference (a plugin update changed the page), run section 2 step 1, then section 4; the phone stays paired. When it lists none and section 7 step 1 finds GitHub sign-in set up, report it and stop, since there's nothing to set up; when GitHub sign-in is missing, run section 7. With `pair`, go straight to section 5; with `--rotate`, run section 2 step 1, then section 3.
+3. `kc url 2>/dev/null`: when a link already exists, run **Check** (section 6) first. When it answers 200 and no argument was given, compare the plugin's page with the deployed copy: `diff -rq -x .vercel -x .env.local -x .gitignore <this skill's base directory>/../../app/ $APP/`. When it lists a difference (a plugin update changed the page), run section 2 step 1, then section 7 (when GitHub sign-in is already set up it goes straight to its deploy); browsers stay signed in. When it lists none and section 7 step 1 finds GitHub sign-in set up, report it and stop, since there's nothing to set up; when GitHub sign-in is missing, run section 7. With `pair`, go straight to section 5; with `--rotate`, run section 2 step 1, then section 3.
 
 ## 2. Project and store
 
@@ -83,20 +83,21 @@ The body is shown only when the status isn't 200, so drafts never print; read it
 
 The page lets in one GitHub account, by its numeric id (a rename can't hand it to someone else). It needs an OAuth app that the user makes, since its client secret is theirs to hold.
 
-1. `vercel env ls production --scope $SCOPE`: when `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and `GITHUB_USER_ID` are all there, skip to step 5.
+1. `cd $APP && vercel env ls production --scope $SCOPE`: when `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and `GITHUB_USER_ID` are all there, skip to step 5.
 2. The user creates the app at https://github.com/settings/applications/new: Application name `Slack Drafts`, Homepage URL `https://<domain>`, Authorization callback URL `https://<domain>/api/github`, Enable Device Flow off. Then Register application, and Generate a new client secret on the app's page. Ask them for the Client ID (it isn't secret); never ask for the secret.
-3. Set the two public values from here:
+3. Set the two public values from here. The page admits only the account whose id goes in, and `gh` may be signed in to a work account, so run `gh api user --jq .login` first and confirm with the user that it's the account they'll sign in with:
 
    ```bash
+   cd $APP
    printf %s "<client id>" | vercel env add GITHUB_CLIENT_ID production --scope $SCOPE
    gh api user --jq .id | tr -d '\n' | vercel env add GITHUB_USER_ID production --scope $SCOPE
    ```
 
-   Without `gh`, ask for their GitHub username and use `curl -s https://api.github.com/users/<username> | jq -r .id` instead.
+   Without `gh`, or for another account, ask for their GitHub username and pipe `curl -s https://api.github.com/users/<username> | jq -r .id | tr -d '\n'` in instead; show them the `.login` that comes back with it before setting it.
 4. The secret goes in from the user's own terminal, so it never passes through the chat. Hand them `cd ~/.config/claudio/slack-drafts-mobile/app && vercel env add GITHUB_CLIENT_SECRET production --scope <SCOPE>` (it asks for the value), and wait until they say it's done.
 5. Deploy (section 4), then `curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' https://<domain>/api/github`: a `302` to `https://github.com/login/oauth/authorize…` means it's on; a redirect to `/#signin-error=not-set-up` means a variable is missing.
 
-From then on any browser signs in with Sign in with GitHub, and the page's Sign out removes the sign-in from a borrowed browser.
+From then on any browser signs in with Sign in with GitHub, and the page's Sign out removes the sign-in from a borrowed browser. On a borrowed computer the user signs out of GitHub too, or the next person there signs in with their GitHub session.
 
 ## Report
 

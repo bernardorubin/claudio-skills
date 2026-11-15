@@ -113,3 +113,23 @@ test('GitHub sign-in gives the owner a one-time handoff for the token and turns 
   delete process.env.GITHUB_CLIENT_ID
   assert.equal((await get('/api/github')).headers.get('location'), '/#signin-error=not-set-up')
 })
+
+test('a GitHub failure on the way back lands on the page with a message, never raw JSON or "not the owner"', async () => {
+  fakeRedis()
+  fakeGithub(42)
+  const to = new URL((await get('/api/github')).headers.get('location') ?? '')
+  const back = `/api/github?code=c1&state=${encodeURIComponent(to.searchParams.get('state') ?? '')}`
+  const next = globalThis.fetch
+  const answer = (token: () => Response, user: () => Response) =>
+    (globalThis.fetch = (async (url: unknown, init?: RequestInit) =>
+      String(url) === 'https://github.com/login/oauth/access_token' ? token()
+      : String(url) === 'https://api.github.com/user' ? user()
+      : next(String(url), init)) as typeof fetch)
+  const ok = () => Response.json({ access_token: 'gho_test' })
+  answer(() => Response.json({ error: 'bad_verification_code' }), () => Response.json({ id: 42 }))
+  assert.equal((await get(back)).headers.get('location'), '/#signin-error=github')
+  answer(ok, () => Response.json({ message: 'rate limited' }, { status: 403 }))
+  assert.equal((await get(back)).headers.get('location'), '/#signin-error=github')
+  answer(() => { throw new TypeError('fetch failed') }, () => Response.json({ id: 42 }))
+  assert.equal((await get(back)).headers.get('location'), '/#signin-error=github')
+})

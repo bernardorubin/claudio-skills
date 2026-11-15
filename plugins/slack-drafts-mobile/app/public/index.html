@@ -294,7 +294,8 @@
   // A home-screen app keeps its own storage, apart from Safari's.
   const TOKEN_KEY = 'slackDraftsToken';
   let token = localStorage.getItem(TOKEN_KEY) || '';
-  const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  // iPadOS Safari reports a Mac, so a touch screen tells them apart
+  const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
   const signout = document.getElementById('signout');
   const post = async (action, body) => {
     const r = await fetch('/api/drafts?action=' + action, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -314,7 +315,7 @@
     token = '';
     localStorage.removeItem(TOKEN_KEY);
     drawn = null;
-    showPairForm('Signed out of this browser.');
+    showPairForm('Signed out of this browser. On a borrowed computer, sign out of GitHub too, or the next person can sign in here with it.');
   });
   const api = (method, query = '', body) => fetch('/api/drafts' + query, {
     method,
@@ -338,16 +339,16 @@
     signout.hidden = true;
     lede.textContent = app || !IOS ? 'Sign in once on this device.'
       : 'To keep it on your Home Screen, add it first (Share, Add to Home Screen) and sign in there: a sign-in here stays in Safari.';
-    const box = panel('Sign in', note || 'With your GitHub account, or a six-digit code from /slack-drafts-mobile pair in Claude Code.');
+    const box = panel('Sign in', note || 'With your GitHub account, or a six-digit code.');
     const gh = document.createElement('button'); gh.type = 'button'; gh.className = 'primary'; gh.textContent = 'Sign in with GitHub';
     gh.addEventListener('click', () => location.assign('/api/github'));
-    const or = document.createElement('p'); or.className = 'or'; or.textContent = 'Or with a code:';
+    const or = document.createElement('p'); or.className = 'or'; or.textContent = 'Or with a code from /slack-drafts-mobile pair in Claude Code:';
     box.append(gh, or);
     const form = document.createElement('form');
     const input = document.createElement('input');
     Object.assign(input, { inputMode: 'numeric', autocomplete: 'one-time-code', maxLength: 6, placeholder: '000000', required: true });
     input.setAttribute('aria-label', 'Six-digit code');
-    const go = document.createElement('button'); go.type = 'submit'; go.className = 'primary'; go.textContent = 'Sign in';
+    const go = document.createElement('button'); go.type = 'submit'; go.textContent = 'Sign in';
     const status = document.createElement('p'); status.className = 'status'; status.setAttribute('role', 'status');
     form.append(input, go);
     box.append(form, status);
@@ -365,6 +366,7 @@
     if (!token) return showPairForm();
     try {
       const r = await api('GET');
+      if (!token) return; // signed out while this was in flight
       if (r.status === 401) {
         token = '';
         localStorage.removeItem(TOKEN_KEY);
@@ -408,6 +410,8 @@
   else if (back) showPairForm(GITHUB_ERRORS[back[2]] || 'GitHub sign-in did not work. Try again.');
   else load();
   // ponytail: a 15 s refresh while the page is in view, and one on every return to it
-  setInterval(() => { if (document.visibilityState === 'visible' && token) load(); }, 15000);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && token) load(); });
+  // re-read storage, so a sign-in finished in another tab of this app shows up here
+  const current = () => (token = token || localStorage.getItem(TOKEN_KEY) || '');
+  setInterval(() => { if (document.visibilityState === 'visible' && current()) load(); }, 15000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && current()) load(); });
 </script>

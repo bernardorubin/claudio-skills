@@ -17,7 +17,7 @@ The skill needs the Vercel CLI (`pnpm i -g vercel`) and a Vercel login. On your 
 2. Makes a token, keeps it in the macOS keychain, and sets it on the project.
 3. Deploys the page.
 4. Sets up Sign in with GitHub: you make a GitHub OAuth app (a name, the page's link and the callback link the skill gives you) and paste its client secret into Vercel from your terminal, so it never goes through the chat. Only your GitHub account gets in, checked by its numeric id.
-5. On the phone, open the page in Safari, tap Share, Add to Home Screen, open it from the home screen, and tap Sign in with GitHub (the home-screen app keeps its own sign-in, apart from Safari's). Any other browser signs in the same way, and Sign out takes a borrowed one back out. A six-digit code from `/slack-drafts-mobile pair` is the fallback.
+5. On the phone, open the page in Safari, tap Share, Add to Home Screen, open it from the home screen, and tap Sign in with GitHub (the home-screen app keeps its own sign-in, apart from Safari's). Any other browser signs in the same way, and Sign out takes a borrowed one back out (sign out of GitHub there too). A six-digit code from `/slack-drafts-mobile pair` is the fallback.
 
 Run it again to check the setup (after a plugin update that changed the page, this also redeploys it; browsers stay signed in), `/slack-drafts-mobile pair` for a code, and `/slack-drafts-mobile --rotate` for a new token (every browser then signs in again).
 

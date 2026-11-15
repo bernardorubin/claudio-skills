@@ -94,6 +94,7 @@ const github = async (req: Request) => {
   const user = await fetch('https://api.github.com/user', {
     headers: { authorization: `Bearer ${access_token}`, accept: 'application/vnd.github+json', 'user-agent': 'slack-drafts-mobile' },
   })
+  if (!user.ok) return fail('github')
   const { id } = (await user.json().catch(() => ({}))) as { id?: unknown }
   if (String(id) !== owner) return fail('not-allowed')
   const once = b64u(crypto.getRandomValues(new Uint8Array(32)))
@@ -130,7 +131,9 @@ const handle = async (req: Request, run: () => Promise<Response>) => {
 export function GET(req: Request) {
   return handle(req, async () => {
     const url = new URL(req.url)
-    if (url.searchParams.get('action') === 'github' || url.pathname === '/api/github') return github(req)
+    // a GitHub or store failure mid-redirect lands back on the page with a message, not raw JSON
+    if (url.searchParams.get('action') === 'github' || url.pathname === '/api/github')
+      return github(req).catch(() => redirect('/#signin-error=github'))
     const denied = guard(req)
     if (denied) return denied
     const flat = ((await redis('HGETALL', KEY)) ?? []) as string[]
