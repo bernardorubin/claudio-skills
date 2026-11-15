@@ -33,4 +33,4 @@ The page never reaches the Mac: a tap only marks the draft, and the mod moves th
 
 - Mod: `hooks/register.tsx`. Check it with `claude plugin validate .` and `claude plugin test .` from this folder.
 - Page backend: `app/api/drafts.ts`. Test it with `node --test app/check-drafts.ts` (Node 22.18+; 22.6 to 22.17 need `--experimental-strip-types`).
-- Page: `app/public/index.html`. Its `slack-html.js` is the same bundle as claudio's `slack-drafts-phone/slack-html.js` (built from `plugins/claudio/hooks/slack-html.ts`).
+- Page: `app/public/index.html`. Its `slack-html.js` is built from `plugins/claudio/hooks/slack-html.ts`, the converter claudio's pane uses (command in the claudio README's Developing the mods).

@@ -1,17 +1,16 @@
-import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 import { clipboardScript } from './slack-html'
 
 const DIR = '/Users/test/Desktop/slack-drafts'
 const DRAFT = 'Both are on staging.\n\n[HPY-1](https://example.com/HPY-1) is fixed, `pay_today` is `true`.'
-// the copy of the phone page's link the mod keeps for write-slack-message and phone-page-allow.py
-const LINK = '/Users/test/.config/claudio/slack-drafts-phone-url'
 const PANE = {
   component: 'Pane' as const,
   requestId: 'slack-drafts',
   props: { title: 'Slack drafts', isFocused: true, bodyColumns: 48, placement: 'dock' as const, scroll: { offset: 0, bodyRows: 40 }, view: {} },
 }
+
+const ok = { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
 
 test('draws each draft as who and when, the message, then its actions', async ($, on) => {
   // a fake drafts folder beneath the mod
@@ -98,45 +97,6 @@ test('drops a draft deleted from another session on the next poll', async ($, on
   await after.unmount()
 })
 
-test('trashes a draft deleted on the phone page and keeps one saved since', async ($, on) => {
-  mock.store(on, { phonePage: 'https://claude.ai/artifact/x' })
-  const clock = mock.clock(on)
-  const GONE = 'nick-1014-1530.md'
-  const KEPT = 'dmytro-1008-1320.md'
-  const files = [
-    { name: GONE, kind: 'file' as const, size: 1, mtimeMs: 100, isLink: false },
-    { name: KEPT, kind: 'file' as const, size: 1, mtimeMs: 900, isLink: false },
-  ]
-  const rows = [
-    { id: 'nick-1014-1530-phone-500', data: { name: GONE, deleted: true, from: 'phone', savedAt: 500 }, version: 1 },
-    { id: 'dmytro-1008-1320-phone-500', data: { name: KEPT, deleted: true, from: 'phone', savedAt: 500 }, version: 1 },
-  ]
-  const moved: string[] = []
-  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', () => ({ value: files }))
-  on('fs.read', () => ({ value: DRAFT }))
-  on('process.run', ($, e) => {
-    if (e.argv[0] === 'mv') moved.push(String(e.argv[1]))
-    return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
-  })
-  on('ui.toast', () => ({ value: undefined }))
-  on('tool.check', () => ({ decision: 'ask' as const })) // what core answers for any ArtifactData call
-  on('tool.call', () => ({ result: {}, text: `2 documents:\n=== BEGIN ===\n${rows.map(r => JSON.stringify(r)).join('\n')}\n=== END ===` }))
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('session.start', () => ({ cwd: '/Users/test' }))
-
-  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
-  await clock.advance(30_000)
-  // a model's tool call is where the mod's own read is allowed
-  await $.tool.call({ tool: 'Read', file_path: '/Users/test/notes.md' })
-  expect(moved).toEqual([`${DIR}/${GONE}`])
-  // only the mod's own read is allowed; anyone else's call to the page still asks
-  const input = { action: 'query', url: 'https://claude.ai/artifact/x', collection: 'drafts' }
-  expect((await $.tool.check({ tool: 'ArtifactData', input })).decision).toBe('ask')
-})
-
-const ok = { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
-
 test('Sent moves the draft into sent/ and stamps it; the trash icon moves it to the Trash', async ($, on) => {
   const NAME = 'dmytro-1008-1320.md'
   const runs: string[][] = []
@@ -179,33 +139,6 @@ test('Sent moves the draft into sent/ and stamps it; the trash icon moves it to 
   expect(String(mv?.[2])).toStartWith('/Users/test/.Trash/')
 })
 
-test('moves a draft marked Sent on the phone page into sent/', async ($, on) => {
-  mock.store(on, { phonePage: 'https://claude.ai/artifact/x' })
-  const clock = mock.clock(on)
-  const NAME = 'nick-1014-1530.md'
-  const rows = [{ id: 'nick-1014-1530-phone-500', data: { name: NAME, deleted: true, sent: true, from: 'phone', savedAt: 500 }, version: 1 }]
-  const runs: string[][] = []
-  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: 1, mtimeMs: 100, isLink: false }] : [] }))
-  on('fs.read', () => ({ value: DRAFT }))
-  on('process.run', ($, e) => {
-    runs.push([...e.argv])
-    return { value: ok }
-  })
-  on('ui.toast', () => ({ value: undefined }))
-  on('tool.check', () => ({ decision: 'ask' as const })) // what core answers for any ArtifactData call
-  on('tool.call', () => ({ result: {}, text: `1 document:\n=== BEGIN ===\n${rows.map(r => JSON.stringify(r)).join('\n')}\n=== END ===` }))
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('session.start', () => ({ cwd: '/Users/test' }))
-
-  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
-  await clock.advance(30_000)
-  // a model's tool call is where the mod's own read is allowed
-  await $.tool.call({ tool: 'Read', file_path: '/Users/test/notes.md' })
-  expect(runs).toContainEqual(['mv', `${DIR}/${NAME}`, `${DIR}/sent/${NAME}`])
-  expect(runs.some(r => r[0] === 'mv' && String(r[2]).includes('.Trash'))).toBe(false)
-})
-
 test('moves sent drafts older than the option to the Trash at session start', { options: { sentDays: '7' } }, async ($, on) => {
   const clock = mock.clock(on)
   const DAY = 86_400_000
@@ -233,430 +166,6 @@ test('moves sent drafts older than the option to the Trash at session start', { 
   await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
   const moved = runs.filter(r => r[0] === 'mv').map(r => r[1])
   expect(moved).toEqual([`${DIR}/sent/old-1001-0900.md`])
-})
-
-test('a saved draft reaches the phone page; anyone else\'s write to the page still asks', async ($, on) => {
-  mock.store(on, { phonePage: 'https://claude.ai/artifact/x' })
-  const NAME = 'nick-1027-1202.md'
-  const synced: unknown[] = []
-  const toasts: string[] = []
-  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: DRAFT.length, mtimeMs: 100, isLink: false }] : [] }))
-  on('fs.read', () => ({ value: DRAFT }))
-  on('ui.toast', ($, e) => {
-    toasts.push(String(e.text))
-    return { value: undefined }
-  })
-  on('ui.open', () => ({ value: { isPlaced: false } }))
-  on('tool.check', () => ({ decision: 'ask' as const })) // what core answers for any ArtifactData call
-  on('tool.call', ($, e) => {
-    if (e.tool === 'ArtifactData' && (e as { action?: string }).action === 'batch') synced.push((e as { writes?: unknown }).writes)
-    return { result: {}, text: '' }
-  })
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('session.start', () => ({ cwd: '/Users/test' }))
-
-  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
-  // saving a draft is what pushes it, with nobody at the Mac to approve the write
-  await $.tool.call({ tool: 'Write', file_path: `${DIR}/${NAME}`, content: DRAFT })
-  expect(synced).toHaveLength(1)
-  expect(toasts.filter(t => t.startsWith('Phone sync failed'))).toEqual([])
-  const writes = { action: 'batch', url: 'https://claude.ai/artifact/x', writes: [] }
-  expect((await $.tool.check({ tool: 'ArtifactData', input: writes })).decision).toBe('ask')
-})
-
-test('with idleSync, an idle poll picks up a Sent tap from the phone page', { options: { idleSync: true } }, async ($, on) => {
-  mock.store(on, { phonePage: 'https://claude.ai/artifact/x' })
-  const clock = mock.clock(on)
-  const NAME = 'nick-1027-1202.md'
-  const rows = [{ id: 'nick-1027-1202-phone-500', data: { name: NAME, deleted: true, sent: true, from: 'phone', savedAt: 500 }, version: 1 }]
-  const runs: string[][] = []
-  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: 1, mtimeMs: 100, isLink: false }] : [] }))
-  on('fs.read', () => ({ value: DRAFT }))
-  on('process.run', ($, e) => {
-    runs.push([...e.argv])
-    return { value: ok }
-  })
-  on('ui.toast', () => ({ value: undefined }))
-  // core answers ask for any ArtifactData call, unless a PreToolUse hook settled it
-  on('tool.check', async ($, e, next) => {
-    const settled = await next(e)
-    return settled.hook === 'PreToolUse' ? settled : { decision: 'ask' as const }
-  })
-  // stands in for the plugin's PreToolUse hook (phone-page-allow.py), which approves only this page's reads and syncs
-  // a mod's classic.PreToolUse hook gets tool.call's envelope (e.tool, the input's fields flat)
-  on('classic.PreToolUse', ($, e) =>
-    e.tool === 'ArtifactData' && e.url === 'https://claude.ai/artifact/x' && ['query', 'batch'].includes(e.action) ? { allow: true as const } : {},
-  )
-  on('tool.call', () => ({ result: {}, text: `1 document:\n=== BEGIN ===\n${rows.map(r => JSON.stringify(r)).join('\n')}\n=== END ===` }))
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('session.start', () => ({ cwd: '/Users/test' }))
-
-  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
-  await clock.advance(30_000) // no tool call: only the timer runs
-  expect(runs).toContainEqual(['mv', `${DIR}/${NAME}`, `${DIR}/sent/${NAME}`])
-})
-
-test('without idleSync, an idle poll never reads the page, so it can never prompt', async ($, on) => {
-  mock.store(on)
-  const clock = mock.clock(on)
-  const calls: string[] = []
-  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', () => ({ value: [] }))
-  on('tool.check', () => ({ decision: 'ask' as const })) // what core answers for any ArtifactData call
-  on('tool.call', ($, e) => {
-    calls.push(e.tool)
-    return { result: {}, text: '' }
-  })
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('session.start', () => ({ cwd: '/Users/test' }))
-
-  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
-  await clock.advance(30_000)
-  // the start's listing runs on a timer too, so an ask refuses it rather than prompting
-  expect(calls).toEqual([])
-})
-
-// `$.store` in memory, readable by the test (mock.store keeps its own out of reach).
-const memStore = (on: On, entries: Record<string, unknown> = {}) => {
-  const m = new Map<string, unknown>(Object.entries(entries))
-  on('store.get', ($, e) => ({ value: m.get(e.key) }))
-  on('store.set', ($, e) => {
-    m.set(e.key, e.value)
-    return { value: undefined }
-  })
-  return m
-}
-
-// The copies of the phone page's link the mod writes for write-slack-message and phone-page-allow.py.
-const mirror = (on: On, written: string[] = []) => {
-  on('fs.write', ($, e) => {
-    if (e.path === LINK) written.push(e.text)
-    return { value: undefined }
-  })
-  return written
-}
-
-// what the Artifact tool lists for `action: 'list'`
-const listing = (...lines: string[]) => `${lines.length} published artifacts (most recently opened or updated first):\n${lines.join('\n')}`
-const OTHER = '- (mine) Week Ending October 8 — https://claude.ai/artifact/W1 — updated 2026-10-08'
-
-test('/slack-drafts asks Claude to republish a phone page that no longer opens, then syncs to the new link', async ($, on) => {
-  const store = memStore(on, { phonePage: 'https://claude.ai/artifact/old' })
-  const clock = mock.clock(on)
-  const NAME = 'nick-1014-1530.md'
-  const prompts: string[] = []
-  const calls: string[] = []
-  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', () => ({ value: [{ name: NAME, kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false }] }))
-  on('fs.read', () => ({ value: DRAFT }))
-  const written = mirror(on)
-  on('ui.open', () => ({ value: { isPlaced: true as const } }))
-  on('ui.toast', () => ({ value: undefined }))
-  on('tool.check', () => ({ decision: 'allow' as const }))
-  on('prompt.submit', ($, e) => {
-    prompts.push(e.text)
-    return { text: e.text }
-  })
-  on('tool.call', ($, e) => {
-    if (e.tool === 'ArtifactComments') calls.push(`watch ${e.url} ${e.on}`)
-    // a listing that no longer shows the deleted page
-    if (e.tool === 'Artifact' && e.action === 'list') return { result: {}, text: listing(OTHER) }
-    if (e.tool !== 'ArtifactData') return { result: {}, text: 'Published /tmp/pad/slack-drafts-phone/index.html at https://claude.ai/artifact/NEW1 (Version 1, version id 1)' }
-    calls.push(`${e.action} ${e.url}`)
-    return e.url?.endsWith('/old')
-      ? { result: {}, isError: true, text: 'db read failed (invalid_argument): no such artifact, collection, or document' }
-      : { result: {}, text: '0 documents' }
-  })
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('session.start', () => ({ cwd: '/Users/test' }))
-
-  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
-  await $.command.run({ command: 'slack-drafts' })
-  await clock.advance(1) // the prompt goes once the command's hook has returned
-  expect(prompts).toHaveLength(1)
-  expect(prompts[0]).toContain('/slack-drafts-phone/index.html')
-  expect(calls).not.toContain('batch https://claude.ai/artifact/old')
-
-  // Claude's publish of the page: its link is saved and the drafts go there
-  await $.tool.call({ tool: 'Artifact', action: 'publish', file_path: '/tmp/pad/slack-drafts-phone/index.html' })
-  expect(store.get('phonePage')).toBe('https://claude.ai/artifact/NEW1')
-  expect(written.at(-1)).toBe('https://claude.ai/artifact/NEW1\n')
-  expect(calls).toContain('batch https://claude.ai/artifact/NEW1')
-  // the publish's comment watch is stopped, so a resumed session has none to report
-  expect(calls).toContain('watch https://claude.ai/artifact/NEW1 false')
-})
-
-test('/slack-drafts publishes a phone page where none is found', async ($, on) => {
-  mock.store(on)
-  const clock = mock.clock(on)
-  const prompts: string[] = []
-  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', () => ({ value: [] }))
-  on('ui.open', () => ({ value: { isPlaced: true as const } }))
-  on('prompt.submit', ($, e) => {
-    prompts.push(e.text)
-    return { text: e.text }
-  })
-  on('tool.call', () => ({ result: {}, text: listing(OTHER) }))
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('session.start', () => ({ cwd: '/Users/test' }))
-
-  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
-  expect((await $.command.run({ command: 'slack-drafts' })).text).toContain('no phone page yet')
-  await clock.advance(1)
-  expect(prompts).toHaveLength(1)
-  expect(prompts[0]).toContain('/slack-drafts-phone/index.html')
-  expect(prompts[0]).not.toContain('claude.ai/artifact')
-  // a second run before the publish lands asks for no second page
-  expect((await $.command.run({ command: 'slack-drafts' })).text).toContain('already publishing')
-  await clock.advance(1)
-  expect(prompts).toHaveLength(1)
-})
-
-test('/slack-drafts publishes nothing when it could not look for a page', async ($, on) => {
-  mock.store(on)
-  const clock = mock.clock(on)
-  const prompts: string[] = []
-  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', () => ({ value: [] }))
-  on('ui.open', () => ({ value: { isPlaced: true as const } }))
-  on('prompt.submit', ($, e) => {
-    prompts.push(e.text)
-    return { text: e.text }
-  })
-  on('tool.call', () => ({ result: {}, isError: true, text: 'listing failed' }))
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('session.start', () => ({ cwd: '/Users/test' }))
-
-  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
-  expect((await $.command.run({ command: 'slack-drafts' })).text).toContain('could not list your artifacts')
-  await clock.advance(1)
-  expect(prompts).toEqual([])
-})
-
-test('a deleted page gives way to the pinned Slack Drafts page, whose handled drafts get tombstones', async ($, on) => {
-  // this Mac synced PIN before, when the jose draft was still open
-  const store = memStore(on, { phonePage: 'https://claude.ai/artifact/gone', syncedPages: { 'https://claude.ai/artifact/PIN': { 'jose-1101-0900.md': 5 } } })
-  const clock = mock.clock(on)
-  const prompts: string[] = []
-  const batches: { url?: string; writes?: { data?: { name?: string; deleted?: boolean } }[] }[] = []
-  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: 'nick-1014-1530.md', kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false }] : [] }))
-  on('fs.read', () => ({ value: DRAFT }))
-  const written = mirror(on)
-  on('ui.open', () => ({ value: { isPlaced: true as const } }))
-  on('ui.toast', () => ({ value: undefined }))
-  on('prompt.submit', ($, e) => {
-    prompts.push(e.text)
-    return { text: e.text }
-  })
-  on('tool.call', ($, e) => {
-    if (e.tool === 'Artifact' && e.action === 'list') {
-      return {
-        result: {},
-        text: listing(
-          '- (mine) Slack Drafts — https://claude.ai/artifact/OLD — updated 2026-11-14',
-          OTHER,
-          '- (mine, pinned) Slack Drafts — https://claude.ai/artifact/PIN — updated 2026-11-06',
-        ),
-      }
-    }
-    if (e.tool === 'ArtifactData' && e.action === 'batch') batches.push({ url: e.url, writes: e.writes })
-    return { result: {}, text: '0 documents' }
-  })
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('session.start', () => ({ cwd: '/Users/test' }))
-
-  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
-  const r = await $.command.run({ command: 'slack-drafts' })
-  await clock.advance(1)
-  expect(r.text).toContain('Phone page: https://claude.ai/artifact/PIN')
-  expect(store.get('phonePage')).toBe('https://claude.ai/artifact/PIN')
-  expect(written.at(-1)).toBe('https://claude.ai/artifact/PIN\n')
-  expect(prompts).toEqual([])
-  expect(batches.map(b => b.url)).toEqual(['https://claude.ai/artifact/PIN'])
-  const names = (batches[0]?.writes ?? []).map(w => `${w.data?.name}${w.data?.deleted ? ' deleted' : ''}`)
-  expect(names).toEqual(['nick-1014-1530.md', 'jose-1101-0900.md deleted'])
-})
-
-test('a listing that still shows the page in use keeps it over a pinned one', async ($, on) => {
-  mock.store(on, { phonePage: 'https://claude.ai/artifact/OLD' })
-  const calls: string[] = []
-  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', () => ({ value: [{ name: 'nick-1014-1530.md', kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false }] }))
-  on('fs.read', () => ({ value: DRAFT }))
-  mirror(on)
-  on('ui.open', () => ({ value: { isPlaced: true as const } }))
-  on('tool.check', () => ({ decision: 'allow' as const }))
-  on('tool.call', ($, e) => {
-    if (e.tool === 'Artifact') {
-      return {
-        result: {},
-        text: listing('- (mine) Slack Drafts — https://claude.ai/artifact/OLD — updated 2026-11-14', '- (mine, pinned) Slack Drafts — https://claude.ai/artifact/PIN — updated 2026-11-06'),
-      }
-    }
-    if (e.tool === 'ArtifactData') calls.push(`${e.action} ${e.url}`)
-    return { result: {}, text: '0 documents' }
-  })
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('session.start', () => ({ cwd: '/Users/test' }))
-
-  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
-  await $.command.run({ command: 'slack-drafts' })
-  expect(calls).toContain('batch https://claude.ai/artifact/OLD')
-  expect(calls.some(c => c.endsWith('/PIN'))).toBe(false)
-})
-
-test('a listing that shows no Slack Drafts page keeps the page in use', async ($, on) => {
-  mock.store(on, { phonePage: 'https://claude.ai/artifact/x' })
-  const calls: string[] = []
-  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', () => ({ value: [{ name: 'nick-1014-1530.md', kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false }] }))
-  on('fs.read', () => ({ value: DRAFT }))
-  mirror(on)
-  on('ui.open', () => ({ value: { isPlaced: true as const } }))
-  on('tool.check', () => ({ decision: 'allow' as const }))
-  on('tool.call', ($, e) => {
-    if (e.tool === 'Artifact') return { result: {}, text: listing(OTHER) }
-    if (e.tool === 'ArtifactData') calls.push(`${e.action} ${e.url}`)
-    return { result: {}, text: '0 documents' }
-  })
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('session.start', () => ({ cwd: '/Users/test' }))
-
-  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
-  await $.command.run({ command: 'slack-drafts' })
-  expect(calls).toContain('batch https://claude.ai/artifact/x')
-})
-
-test('a session that cannot list artifacts follows the page another session saved, within 30 seconds', async ($, on) => {
-  const store = memStore(on)
-  const clock = mock.clock(on)
-  const calls: string[] = []
-  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', () => ({ value: [] }))
-  on('tool.check', () => ({ decision: 'allow' as const }))
-  // stands in for the plugin's PreToolUse hook (phone-page-allow.py), which approves this page's reads
-  on('classic.PreToolUse', () => ({ allow: true as const }))
-  on('tool.call', ($, e) => {
-    if (e.tool === 'Artifact') throw new Error('No such tool available: Artifact')
-    if (e.tool === 'ArtifactData') calls.push(`${e.action} ${e.url}`)
-    return { result: {}, text: '0 documents' }
-  })
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('session.start', () => ({ cwd: '/Users/test' }))
-
-  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
-  // another session publishes the page after this one started
-  store.set('phonePage', 'https://claude.ai/artifact/NEW1')
-  await clock.advance(30_000) // no tool call: the poll alone follows it
-  expect(calls).toContain('query https://claude.ai/artifact/NEW1')
-})
-
-test('a write to the link copy cannot redirect the drafts', async ($, on) => {
-  mock.store(on, { phonePage: 'https://claude.ai/artifact/x' })
-  const NAME = 'nick-1027-1202.md'
-  const batches: string[] = []
-  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: DRAFT.length, mtimeMs: 100, isLink: false }] : [] }))
-  // someone else wrote another page into the copy
-  on('fs.read', ($, e) => ({ value: e.path === LINK ? 'https://claude.ai/artifact/EVIL\n' : DRAFT }))
-  mirror(on)
-  on('ui.open', () => ({ value: { isPlaced: false } }))
-  on('tool.check', () => ({ decision: 'allow' as const }))
-  on('tool.call', ($, e) => {
-    if (e.tool === 'ArtifactData' && e.action === 'batch') batches.push(String(e.url))
-    return { result: {}, text: '' }
-  })
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('session.start', () => ({ cwd: '/Users/test' }))
-
-  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
-  await $.tool.call({ tool: 'Write', file_path: `${DIR}/${NAME}`, content: DRAFT })
-  expect(batches).toEqual(['https://claude.ai/artifact/x'])
-})
-
-test('an install from 4.25 keeps syncing to the page it last synced, and saves its link', async ($, on) => {
-  const store = memStore(on, { syncedUrl: 'https://claude.ai/artifact/x' })
-  const clock = mock.clock(on)
-  const NAME = 'nick-1027-1202.md'
-  const batches: string[] = []
-  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: DRAFT.length, mtimeMs: 100, isLink: false }] : [] }))
-  on('fs.read', () => ({ value: DRAFT }))
-  const written = mirror(on)
-  on('ui.open', () => ({ value: { isPlaced: true as const } }))
-  on('tool.check', () => ({ decision: 'allow' as const }))
-  on('tool.call', ($, e) => {
-    if (e.tool === 'Artifact') throw new Error('No such tool available: Artifact')
-    if (e.tool === 'ArtifactData' && e.action === 'batch') batches.push(String(e.url))
-    return { result: {}, text: '' }
-  })
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('session.start', () => ({ cwd: '/Users/test' }))
-
-  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
-  await clock.advance(1)
-  expect(store.get('phonePage')).toBe('https://claude.ai/artifact/x')
-  expect(written).toEqual(['https://claude.ai/artifact/x\n'])
-  await $.tool.call({ tool: 'Write', file_path: `${DIR}/${NAME}`, content: DRAFT })
-  expect(batches).toEqual(['https://claude.ai/artifact/x'])
-})
-
-test('/slack-drafts still answers in a session that cannot reach artifacts', async ($, on) => {
-  mock.store(on, { phonePage: 'https://claude.ai/artifact/x' })
-  const NAME = 'jose-1113-1122.md'
-  const toasts: string[] = []
-  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false }] : [] }))
-  on('fs.read', () => ({ value: DRAFT }))
-  on('ui.open', () => ({ value: { isPlaced: true as const } }))
-  on('ui.toast', ($, e) => {
-    toasts.push(String(e.text))
-    return { value: undefined }
-  })
-  on('tool.check', () => ({ decision: 'allow' as const }))
-  // what a session without the artifact tools does: the call itself fails
-  on('tool.call', ($, e) => {
-    if (e.tool === 'ArtifactData') throw new Error('No such tool available: ArtifactData')
-    return { result: {}, text: '' }
-  })
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('session.start', () => ({ cwd: '/Users/test' }))
-
-  await $.session.start({ cwd: '/Users/test', surface: 'mobile', isInteractive: true })
-  const r = await $.command.run({ command: 'slack-drafts' })
-  expect(JSON.stringify(r)).toContain('1 draft in the pane')
-  expect(JSON.stringify(r)).toContain("can't reach artifacts")
-})
-
-test('with idleSync, another session pushes a draft the saving session could not', { options: { idleSync: true } }, async ($, on) => {
-  mock.store(on, { phonePage: 'https://claude.ai/artifact/x' })
-  const clock = mock.clock(on)
-  const NAME = 'jose-1113-1122.md'
-  const batches: unknown[] = []
-  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
-  on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: NAME, kind: 'file' as const, size: 1, mtimeMs: 100, isLink: false }] : [] }))
-  on('fs.read', () => ({ value: DRAFT }))
-  on('ui.toast', () => ({ value: undefined }))
-  // stands in for the plugin's PreToolUse hook (phone-page-allow.py), which approves this page's syncs
-  on('tool.check', () => ({ decision: 'allow' as const }))
-  on('tool.call', ($, e) => {
-    if (e.tool === 'ArtifactData' && (e as { action?: string }).action === 'batch') batches.push((e as { writes?: unknown }).writes)
-    return { result: {}, text: '0 documents' }
-  })
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('session.start', () => ({ cwd: '/Users/test' }))
-
-  // this session saw no Write: the draft came from another session's folder write
-  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
-  await clock.advance(30_000)
-  expect(batches).toHaveLength(1)
-  // the shared record now holds it, so the next tick sends nothing again
-  await clock.advance(30_000)
-  expect(batches).toHaveLength(1)
 })
 
 test('on the phone, a saved draft shows as a card under its Write row', async ($, on) => {
@@ -688,4 +197,22 @@ test('on the phone, a saved draft shows as a card under its Write row', async ($
   const other = await $.ui.mount({ plugin: 'claudio', surface: 'mobile', ...row('/Users/test/notes.md') })
   expect(await other.find({ type: 'Text', text: 'Slack draft for jose' })).toBeUndefined()
   await other.unmount()
+})
+
+test('/slack-drafts opens the pane and says how many drafts it holds', async ($, on) => {
+  const opened: unknown[] = []
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/test' : undefined }))
+  on('fs.list', ($, e) => ({ value: e.path === DIR ? [{ name: 'jose-1113-1122.md', kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false }] : [] }))
+  on('fs.read', () => ({ value: DRAFT }))
+  on('ui.open', ($, e) => {
+    opened.push(e.id)
+    return { value: { isPlaced: true as const } }
+  })
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', () => ({ cwd: '/Users/test' }))
+
+  await $.session.start({ cwd: '/Users/test', surface: 'desktop', isInteractive: true })
+  const r = await $.command.run({ command: 'slack-drafts', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
+  expect(JSON.stringify(r)).toContain('1 draft in the pane')
+  expect(opened).toEqual(['slack-drafts'])
 })

@@ -24,7 +24,7 @@ This skill is a conductor — it does not reimplement either; it invokes them in
    - **Keep**: anything the session didn't write (the user's own files and
      screenshots), anything still in use (evidence for a ticket still in QA, a
      `handoff-*.md`, which exists for the next session), worklogs,
-     `weekly-summaries/`, and `slack-drafts/` (its pane and phone page own its
+     `weekly-summaries/`, and `slack-drafts/` (its pane and the phone page own its
      lifecycle). When unsure, keep it.
    - Trash with `trash <paths>` (`/usr/bin/trash`, macOS 15+), else
      `mv <path> ~/.Trash/`. Never `rm`: the Trash keeps a wrong call recoverable.

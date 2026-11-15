@@ -4,8 +4,8 @@ description: >-
   Use when the user asks to draft, write, format, or compose a Slack message. Triggers
   on "write a slack message", "draft a slack post", "how should I phrase this for
   slack", "send this on slack", or any request to format text for Slack. Saves a copy-
-  paste-ready draft to ~/Desktop/slack-drafts/ (shown in the /slack-drafts pane and
-  on the Slack Drafts phone page), falling back to
+  paste-ready draft to ~/Desktop/slack-drafts/ (shown in the /slack-drafts pane, and
+  on the phone page when slack-drafts-mobile is set up), falling back to
   ~/Desktop/slack-message-for-<recipient>.md. With the Slack MCP connected it names
   where to post (linked so it opens in Slack) and who to tag; it never posts through
   the MCP. Never puts the draft in the chat.
@@ -244,33 +244,32 @@ line names each file and what it shows.
    [#hpy-api thread on PR 2886](https://…/p1760467200123456); tag
    [Nick Conn](https://…/team/U081C53KT0T)."
 5. **Start nothing.** In folder mode this plugin's `/slack-drafts` pane
-   sees the save, opens its pane and sends the draft to the phone page on its
-   own. Mention `/slack-drafts` once in the report line only if the user seems
+   sees the save and opens on its own, and the optional `slack-drafts-mobile`
+   plugin sends the draft to the phone page. Mention `/slack-drafts` once in the
+   report line only if the user seems
    not to know where drafts show up.
 6. Below that, one line naming what you cut, so they can add it back.
 
 ### On a phone -- link the Slack Drafts page
 
 The draft never goes in the chat, on any device: no code block, no inline copy.
-Saving it is what sends it to the `/slack-drafts` pane on the desktop and to
-the Slack Drafts phone page, whose Copy for Slack keeps links and code.
+Saving it is what sends it to the `/slack-drafts` pane on the desktop and, with
+the optional `slack-drafts-mobile` plugin, to the Slack Drafts phone page, whose
+Copy for Slack keeps links and code.
 
 So when the user says they are on their phone, on the road, or away from their
 laptop, save exactly as above and change only the report line: link the phone
-page instead of giving the path. With the `slack-drafts-mobile` plugin set up,
-the page is on the user's own Vercel account and its link is in the keychain;
-otherwise it is the "Slack Drafts" artifact, whose link the claudio mod keeps in
-a file. Take the first that prints a link:
+page instead of giving the path. The page is on the user's own Vercel account,
+and its link is in the keychain:
 
 ```bash
-security find-generic-password -s claudio-slack-drafts-mobile -a url -w 2>/dev/null \
-  || cat ~/.config/claudio/slack-drafts-phone-url 2>/dev/null
+security find-generic-password -s claudio-slack-drafts-mobile -a url -w 2>/dev/null
 ```
 
-Empty means no phone page is known yet: say the draft is saved and that
-`/slack-drafts` finds or publishes the artifact page (with the optional
-`slack-drafts-mobile` plugin installed, `/slack-drafts-mobile` sets up its Vercel
-page instead). The page only receives drafts saved in folder mode.
+Empty means no phone page is set up: say the draft is saved, and that the
+`slack-drafts-mobile` plugin (`/plugin install slack-drafts-mobile@claudio`, then
+`/slack-drafts-mobile`) puts drafts on a phone page. The page only receives
+drafts saved in folder mode.
 
 ### Knowing what was sent
 
@@ -290,7 +289,7 @@ there is no record: ask.
 
 This plugin's `/slack-drafts` pane shows them: it
 lists every draft newest first, with Copy for Slack (an HTML
-clipboard copy, so `[label](url)` pastes as a real link), Sent and a trash icon. On the phone, its pinned Slack Drafts page does the same. Mention it only if
+clipboard copy, so `[label](url)` pastes as a real link), Sent and a trash icon. On the phone, the `slack-drafts-mobile` page does the same. Mention it only if
 the user asks how to find an older draft; the drafting flow above must work
 unchanged without it.
 

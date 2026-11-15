@@ -1,7 +1,7 @@
 {
   "name": "slack-drafts-mobile",
   "description": "Your Slack drafts on your phone: a small page on your own Vercel account that /write-slack-message drafts sync to, with Copy for Slack (links and code intact), Sent and delete. Works in every Claude Code session, Remote Control included.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": {
     "name": "Bernardo Rubin",
     "url": "https://github.com/bernardorubin"

@@ -210,11 +210,11 @@ Drafts a Slack message ready to paste, business-casual, with **no sentence cap**
 
 **Where it saves.** `~/Desktop/slack-message-for-<recipient>.md` by default, overwriting the previous draft for that person. Create `~/Desktop/slack-drafts/` and it switches to timestamped files in there instead, so rewriting a message stops destroying the version it replaces. The folder's existence is the opt-in and the skill never creates it for you. A redraft to the same person moves the draft it supersedes to the Trash, so the pane only shows the current one.
 
-**Reading drafts back.** `/slack-drafts` opens a pane of every draft with **Copy for Slack** (an HTML clipboard copy, so `[label](url)` pastes as a real link) and delete, and its optional phone page brings the same copy to your iPhone. See [Mods](#mods).
+**Reading drafts back.** `/slack-drafts` opens a pane of every draft with **Copy for Slack** (an HTML clipboard copy, so `[label](url)` pastes as a real link) and delete; the optional [`slack-drafts-mobile`](../slack-drafts-mobile/README.md) plugin brings the same copy to your iPhone. See [Mods](#mods).
 
 **With the Slack MCP connected**, the report line names where to post it (the thread, channel or DM, linked so one click opens it in Slack) and who to tag (each looked up in Slack, linked to their profile), instead of a vague `everyone`. In the drafts folder the same two lines sit at the top of the draft, so the pane and the phone page show them above the message; neither copy includes them. It only reads through the MCP and never posts: anything posted that way carries a "Sent using Claude" footer.
 
-**On a phone**, say so and the reply links the Slack Drafts phone page instead of the file path. The draft never goes in the chat, on any device.
+**On a phone**, say so and the reply links the `slack-drafts-mobile` phone page instead of the file path. The draft never goes in the chat, on any device.
 
 Auto-triggers on phrases like "draft a slack message", "how should I phrase this for slack", "write up a slack post".
 
@@ -391,36 +391,28 @@ Desktop draws an animated SVG (still under reduced motion); the terminal draws a
 
 ### `/slack-drafts`
 
-A pane for the drafts `/write-slack-message` saves to `~/Desktop/slack-drafts/`, plus an optional phone page so you can paste them from your iPhone with Slack formatting intact.
+A pane for the drafts `/write-slack-message` saves to `~/Desktop/slack-drafts/`. For the same drafts on your iPhone, with Slack formatting intact, install the optional [`slack-drafts-mobile`](../slack-drafts-mobile/README.md) plugin: it syncs this folder to a small page on your own Vercel account.
 
 - `/slack-drafts` opens the pane: one card per draft, newest first, rendered as Markdown with each `@name` in purple (a typed @ pastes as plain text, so those are the ones to re-tag in Slack), with where to post it and who to tag (linked) above the message when the skill found them.
-- A draft whose header lists `attach:` files (screenshots, recordings) shows a 📎 button per file that selects it in Finder, ready to drag into the Slack message. The phone page names those files under the message, since they stay on the Mac.
+- A draft whose header lists `attach:` files (screenshots, recordings) shows a 📎 button per file that selects it in Finder, ready to drag into the Slack message.
 - Saving a draft opens the pane on its own, and a save or delete in any session shows in every open pane within a few seconds.
 - **Copy for Slack** puts an HTML version on the Mac clipboard (via `osascript`), so `[label](url)` pastes as a link and backticks as code.
 - **Sent** takes the draft off the list and moves it into `sent/` inside the drafts folder, so Claude can tell a message you sent from one you threw away. The **trash icon** discards it (moves the file to the Trash). Sent drafts stay for 1 day, then move to the Trash at the next session start; the **Keep sent Slack drafts** option (`/config`, or `pluginConfigs["claudio@claudio"].options.sentDays`: 1, 3, 7, 14 or 30) changes that.
 - `SLACK_DRAFTS_DIR` overrides the folder.
 
-**On your phone.** Slack on iOS only keeps formatting when the clipboard carries HTML, which the Claude app cannot put there for a mod. So drafts are mirrored to a private claude.ai artifact ([`slack-drafts-phone/index.html`](slack-drafts-phone/index.html)) whose **Copy for Slack** button does that copy in the browser. Each save, delete or `/slack-drafts` appends rows to that artifact's database through the `ArtifactData` tool. The mod allows its own reads and writes to that one page, so a draft reaches the phone while nobody is at the Mac to approve it; anything else writing to the page still asks. The page shows the newest row per draft and tidies the rest. **Sent** and the **trash icon** on the page do the same to the Mac file (into `sent/`, or to the Trash), within about 30 seconds of the next tool call in any Claude Code session, or at once on `/slack-drafts`.
+**On the phone, in the session itself.** When you follow a session in the Claude mobile app, each saved draft shows as a card under the Write that saved it.
 
-**If the page stops opening** (deleted, or Claude Code signed in to an account that doesn't own it), `/slack-drafts` switches to another Slack Drafts page of yours when the listing shows one, or else has Claude publish a new page, pinned. Either way it resends the drafts there, and drafts this Mac put on that page and has sent or deleted since are removed from it. Other open sessions follow the new link within 30 seconds instead of publishing a page of their own. Open the new link on the phone once; the old pin no longer updates.
-
-**Idle sync (optional).** By default a phone tap waits for the next tool call, because a mod's timer can't approve its own calls. Turn on **Slack drafts idle sync** in `/config` to have taps picked up within 30 seconds while every session sits idle. It also pushes drafts no session has sent yet, so a draft saved in a session that can't reach artifacts (one driven from the phone by Remote Control has shown this) reaches the phone page through any other session open on the Mac. The plugin ships a `PreToolUse` hook (`hooks/phone-page-allow.py`, needs `python3`) that approves only `query` and `batch` calls to your phone page; other artifacts, other actions and your own deny/ask rules are untouched. Nothing to add to `settings.json`.
-
-**On the phone, in the session itself.** When you follow a session in the Claude mobile app, each saved draft shows as a card under the Write that saved it, so you can read it there even when the phone page can't be synced. `/slack-drafts` always answers, and says when this session couldn't reach the phone page.
-
-**Setup is automatic, and there is no link to configure.** Each session start and `/slack-drafts` looks for your own artifact named **Slack Drafts** (pinned first), and `/slack-drafts` prints the link it found. When there is none, `/slack-drafts` has Claude publish one from the installed plugin's `slack-drafts-phone/`, pinned to your claude.ai sidebar, and sends your drafts there. The link is kept in the plugin's own store, which every session shares, so a session without the Artifact tool still syncs. A copy goes to `~/.config/claudio/slack-drafts-phone-url` for `write-slack-message` and the idle sync hook; the mod never reads that copy back. If `/slack-drafts` can't list your artifacts, it says so and publishes nothing. It needs Claude Code signed in to a claude.ai account (the Artifact tool), and the phone signed in to the same one.
-
-The page is a published copy of `slack-drafts-phone/`, so a claudio update that changes those files does not reach it on its own. After such an update, ask Claude to republish the page to its current URL, which keeps the link, the pin and the drafts. A page older than 4.6.0 copies the where-to-post header along with the message.
+**Before 5.0.0** the phone page was a claude.ai artifact synced through the `ArtifactData` tool, which only works in sessions that have the artifact tools. 5.0.0 removes it, with the **Slack drafts idle sync** option and its `PreToolUse` hook. Install `slack-drafts-mobile` and run `/slack-drafts-mobile` instead; the old artifact page stops updating and can be deleted from claude.ai.
 
 ### Developing the mods
 
-`slack-drafts-phone/slack-html.js` is built from `hooks/slack-html.ts`, so the pane and the page share one converter. From `plugins/claudio`, after changing it:
+The `slack-drafts-mobile` page's `slack-html.js` is built from `hooks/slack-html.ts`, so the pane and the page share one converter. From `plugins/claudio`, after changing it:
 
 ```
-npx esbuild@0.24.2 hooks/slack-html.ts --bundle --format=iife --global-name=SlackHtml --target=es2020 --outfile=slack-drafts-phone/slack-html.js
+npx esbuild@0.24.2 hooks/slack-html.ts --bundle --format=iife --global-name=SlackHtml --target=es2020 --outfile=../slack-drafts-mobile/app/public/slack-html.js
 ```
 
-Then republish the artifact with the new `slack-html.js`. Check any hooks change with:
+Then run `/slack-drafts-mobile` to redeploy the page. Check any hooks change with:
 
 ```
 claude plugin validate .
