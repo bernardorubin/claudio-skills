@@ -25,9 +25,14 @@ kc() { security find-generic-password -s claudio-slack-drafts-mobile -a "$1" -w;
 
 ## 1. Preflight
 
-1. `command -v vercel`: when it's missing, tell the user to run `pnpm i -g vercel` and stop.
-2. `vercel whoami`: when it isn't logged in, ask the user to run `vercel login` in a terminal (it opens a browser), then continue. Then `vercel teams ls`, and keep the slug of the "<username>'s projects" team as `SCOPE`.
-3. `kc url 2>/dev/null`: when a link already exists, run **Check** (section 6) first. When it answers 200 and no argument was given, compare the plugin's page with the deployed copy: `diff -rq -x .vercel -x .env.local -x .gitignore <this skill's base directory>/../../app/ $APP/`. When it lists a difference (a plugin update changed the page), run section 2 step 1, then section 7 (when GitHub sign-in is already set up it goes straight to its deploy); browsers stay signed in. When it lists none and section 7 step 1 finds GitHub sign-in set up, report it and stop, since there's nothing to set up; when GitHub sign-in is missing, run section 7. With `pair`, go straight to section 5; with `--rotate`, run section 2 step 1, then section 3.
+1. **Where the drafts live, first.** The page shows the drafts in one folder: `$SLACK_DRAFTS_DIR` when it's set (`printenv SLACK_DRAFTS_DIR`), else `$HOME/Desktop/slack-drafts`. Write every folder as an absolute path, since `~` doesn't expand inside the quotes below. `/write-slack-message` saves there only when the folder exists, so without it the page stays empty. When it exists, name it in one line and go on. When it doesn't, ask the user before anything else where their drafts should go, with that folder first (recommended) and another folder second:
+   - That folder: `mkdir -p "<it>"`.
+   - Another folder: `mkdir -p "<it>"`, then set `SLACK_DRAFTS_DIR` to its absolute path in the `env` block of `~/.claude/settings.json`, keeping everything else in the file: `jq --arg d "<it>" '.env.SLACK_DRAFTS_DIR = $d' ~/.claude/settings.json > "$TMPDIR/sdm-settings.json" && mv "$TMPDIR/sdm-settings.json" ~/.claude/settings.json` (with no settings file yet, write `{"env":{"SLACK_DRAFTS_DIR":"<it>"}}`). Sessions read `env` when they start, so the report tells the user to restart Claude Code. claudio's `/slack-drafts` pane, `/write-slack-message` and this plugin's mod all use the folder.
+
+   The user's answer is the opt-in the folder stands for, so making it here is fine; never make it without asking.
+2. `command -v vercel`: when it's missing, tell the user to run `pnpm i -g vercel` and stop.
+3. `vercel whoami`: when it isn't logged in, ask the user to run `vercel login` in a terminal (it opens a browser), then continue. Then `vercel teams ls`, and keep the slug of the "<username>'s projects" team as `SCOPE`.
+4. `kc url 2>/dev/null`: when a link already exists, run **Check** (section 6) first. When it answers 200 and no argument was given, compare the plugin's page with the deployed copy: `diff -rq -x .vercel -x .env.local -x .gitignore <this skill's base directory>/../../app/ $APP/`. When it lists a difference (a plugin update changed the page), run section 2 step 1, then section 7 (when GitHub sign-in is already set up it goes straight to its deploy); browsers stay signed in. When it lists none and section 7 step 1 finds GitHub sign-in set up, report it and stop, since there's nothing to set up; when GitHub sign-in is missing, run section 7. With `pair`, go straight to section 5; with `--rotate`, run section 2 step 1, then section 3.
 
 ## 2. Project and store
 
@@ -101,4 +106,4 @@ From then on any browser signs in with Sign in with GitHub, and the page's Sign 
 
 ## Report
 
-Three lines at most: the page's link (clickable), what this run changed (deployed, re-keyed, paired, GitHub sign-in set up, or nothing), and what the user does next (Sign in with GitHub on the phone, or enter the code). Never the token or the client secret.
+Three lines at most: the page's link (clickable), what this run changed (drafts folder made, deployed, re-keyed, paired, GitHub sign-in set up, or nothing), and what the user does next (restart Claude Code after a new `SLACK_DRAFTS_DIR`, Sign in with GitHub on the phone, or enter the code). Never the token or the client secret.

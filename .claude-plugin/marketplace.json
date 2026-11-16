@@ -31,7 +31,7 @@
         "ref": "main"
       },
       "description": "Your /write-slack-message drafts on your phone: a small page on your own Vercel account with Copy for Slack (links and code intact), Sent and delete, synced by a mod in every Claude Code session. Set it up with /slack-drafts-mobile.",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "author": {
         "name": "Bernardo Rubin"
       }

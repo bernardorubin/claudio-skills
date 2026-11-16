@@ -11,7 +11,7 @@ It syncs over plain HTTPS from a mod, so it works in every Claude Code session, 
 /slack-drafts-mobile
 ```
 
-The skill needs the Vercel CLI (`pnpm i -g vercel`) and a Vercel login. On your personal account it:
+The skill first asks where your drafts should live (`~/Desktop/slack-drafts` unless you pick another folder) and makes the folder: `/write-slack-message` saves drafts there only when it exists. Then it needs the Vercel CLI (`pnpm i -g vercel`) and a Vercel login. On your personal account it:
 
 1. Creates a project and a free Upstash Redis store. Adding the store asks you to accept Upstash's Marketplace terms once.
 2. Makes a token, keeps it in the macOS keychain, and sets it on the project.
