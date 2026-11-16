@@ -28,6 +28,7 @@ type Opts = {
   listFails?: boolean
   mvFails?: boolean
   reply?: (c: Call) => { status: number; text: string }
+  tool?: (input: Record<string, unknown>) => { text: string; isError?: boolean }
 }
 const setup = (on: On, opts: Opts) => {
   const runs: string[][] = []
@@ -60,13 +61,22 @@ const setup = (on: On, opts: Opts) => {
     toasts.push(e.text)
     return { value: undefined }
   })
+  const tools: Record<string, unknown>[] = []
+  on('tool.call', ($, e) => {
+    const input = e as unknown as Record<string, unknown>
+    tools.push(input)
+    const r = opts.tool?.(input) ?? { text: '' }
+    return r.isError ? { result: {}, isError: true as const, text: r.text } : { result: {}, text: r.text }
+  })
   on('session.start', () => ({ cwd: '/Users/test' }))
-  return { runs, calls, toasts }
+  return { runs, calls, toasts, tools }
 }
 
 const SESSION = { cwd: '/Users/test', surface: 'desktop', isInteractive: true } as const
+const VERCEL = { options: { page: 'vercel' } } as const
+const ARTIFACT = { options: { page: 'artifact' } } as const
 
-test('not set up: one nudge, no requests, and no keychain item read as a link', async ($, on) => {
+test('vercel: not set up: one nudge, no requests, and no keychain item read as a link', VERCEL, async ($, on) => {
   const clock = mock.clock(on)
   const store = memStore(on)
   const { calls, toasts } = setup(on, { linked: false, files: () => [{ name: NAME, mtimeMs: 1 }] })
@@ -80,7 +90,7 @@ test('not set up: one nudge, no requests, and no keychain item read as a link', 
   expect(toasts.length).toBe(1)
 })
 
-test('a new draft is pushed once with the token, and a removed one is deleted from the page', async ($, on) => {
+test('vercel: a new draft is pushed once with the token, and a removed one is deleted from the page', VERCEL, async ($, on) => {
   const clock = mock.clock(on)
   const store = memStore(on)
   let files = [{ name: NAME, mtimeMs: 100 }]
@@ -101,7 +111,7 @@ test('a new draft is pushed once with the token, and a removed one is deleted fr
   expect(store.get('pushed')).toEqual({})
 })
 
-test('Sent on the phone moves the file into sent/, deletes it from the page and toasts', async ($, on) => {
+test('vercel: Sent on the phone moves the file into sent/, deletes it from the page and toasts', VERCEL, async ($, on) => {
   const clock = mock.clock(on)
   memStore(on, { pushed: { [NAME]: 100 } })
   const { runs, calls, toasts } = setup(on, {
@@ -116,7 +126,7 @@ test('Sent on the phone moves the file into sent/, deletes it from the page and 
   expect(toasts).toContain('From the phone: 1 marked sent')
 })
 
-test('a delete on the phone goes to the Trash, but a draft saved again after the tap stays', async ($, on) => {
+test('vercel: a delete on the phone goes to the Trash, but a draft saved again after the tap stays', VERCEL, async ($, on) => {
   const clock = mock.clock(on)
   const EDITED = 'nick-1114-2140.md'
   memStore(on, { pushed: { [NAME]: 100, [EDITED]: 900 } })
@@ -134,7 +144,7 @@ test('a delete on the phone goes to the Trash, but a draft saved again after the
   expect(runs.some(r => r[0] === 'mv' && r[1] === `${DIR}/${EDITED}`)).toBe(false)
 })
 
-test('nothing pushed means no reads of the page', async ($, on) => {
+test('vercel: nothing pushed means no reads of the page', VERCEL, async ($, on) => {
   const clock = mock.clock(on)
   memStore(on)
   const { calls } = setup(on, { files: () => [] })
@@ -143,7 +153,7 @@ test('nothing pushed means no reads of the page', async ($, on) => {
   expect(calls.filter(c => c.method === 'GET')).toEqual([])
 })
 
-test('a refused token warns once and retries only after the next minute reads the keychain', async ($, on) => {
+test('vercel: a refused token warns once and retries only after the next minute reads the keychain', VERCEL, async ($, on) => {
   const clock = mock.clock(on)
   memStore(on)
   const { calls, toasts } = setup(on, { files: () => [{ name: NAME, mtimeMs: 100 }], reply: () => ({ status: 401, text: '{"error":"unauthorized"}' }) })
@@ -156,7 +166,7 @@ test('a refused token warns once and retries only after the next minute reads th
   expect(toasts.filter(t => t.includes('refused this Mac')).length).toBe(1)
 })
 
-test('a rotated token reaches a running session within a minute', async ($, on) => {
+test('vercel: a rotated token reaches a running session within a minute', VERCEL, async ($, on) => {
   const clock = mock.clock(on)
   memStore(on)
   let token = 'old'
@@ -172,7 +182,7 @@ test('a rotated token reaches a running session within a minute', async ($, on) 
   expect(puts.map(c => c.auth)).toEqual(['Bearer old', 'Bearer new'])
 })
 
-test('a refused draft is pushed once, not every tick, and the toast names it', async ($, on) => {
+test('vercel: a refused draft is pushed once, not every tick, and the toast names it', VERCEL, async ($, on) => {
   const clock = mock.clock(on)
   memStore(on)
   const { calls, toasts } = setup(on, { files: () => [{ name: NAME, mtimeMs: 100 }], reply: c => ({ status: c.method === 'PUT' ? 400 : 200, text: c.method === 'PUT' ? '{"error":"bad draft"}' : '{"drafts":[]}' }) })
@@ -184,7 +194,7 @@ test('a refused draft is pushed once, not every tick, and the toast names it', a
   expect(toasts.some(t => t.includes(NAME) && t.includes('bad draft'))).toBe(true)
 })
 
-test('a move that fails keeps the row on the page and says so', async ($, on) => {
+test('vercel: a move that fails keeps the row on the page and says so', VERCEL, async ($, on) => {
   const clock = mock.clock(on)
   memStore(on, { pushed: { [NAME]: 100 } })
   const { calls, toasts } = setup(on, {
@@ -199,7 +209,7 @@ test('a move that fails keeps the row on the page and says so', async ($, on) =>
   expect(toasts.some(t => t.includes(`could not move ${NAME}`))).toBe(true)
 })
 
-test('an unreadable folder deletes nothing from the page', async ($, on) => {
+test('vercel: an unreadable folder deletes nothing from the page', VERCEL, async ($, on) => {
   const clock = mock.clock(on)
   memStore(on, { pushed: { [NAME]: 100 } })
   const { calls } = setup(on, {
@@ -209,4 +219,179 @@ test('an unreadable folder deletes nothing from the page', async ($, on) => {
   await $.session.start(SESSION)
   await clock.advance(15_000)
   expect(calls.some(c => c.method === 'DELETE')).toBe(false)
+})
+
+// ── the Artifact page (the default) ──
+
+const DASH = String.fromCharCode(0x2014)
+const PAGE = 'https://claude.ai/artifact/Pinned1'
+const listing = (...lines: string[]) => [`${lines.length} published artifacts (most recently opened or updated first):`, ...lines].join('\n')
+const LISTED = listing(
+  `- (mine) Week Ending October 14 ${DASH} https://claude.ai/artifact/Other1 ${DASH} updated 2026-11-06`,
+  `- (mine, pinned) Slack Drafts ${DASH} ${PAGE} ${DASH} updated 2026-11-05`,
+)
+const tomb = (name: string, savedAt: number, sent: boolean) =>
+  `=== BEGIN ARTIFACT DB 1 ===\n${JSON.stringify({ id: `${name}-phone-${savedAt}`, data: { deleted: true, from: 'phone', name, savedAt, sent }, version: 1 })}\n=== END ARTIFACT DB 1 ===`
+const dbCalls = (tools: Record<string, unknown>[]) => tools.filter(t => t.tool === 'ArtifactData')
+
+test('artifact: a draft goes to the pinned Slack Drafts page as a new row, and a removed one as a tombstone', ARTIFACT, async ($, on) => {
+  const clock = mock.clock(on)
+  const store = memStore(on)
+  let files = [{ name: NAME, mtimeMs: 100 }]
+  const { tools } = setup(on, { files: () => files, tool: i => ({ text: i.tool === 'Artifact' ? LISTED : 'ok' }) })
+  await $.session.start(SESSION)
+  await clock.advance(3_000)
+  await clock.advance(3_000)
+  const batches = dbCalls(tools).filter(t => t.action === 'batch')
+  expect(batches.length).toBe(1)
+  expect(batches[0]?.url).toBe(PAGE)
+  const [w] = batches[0]?.writes as { op: string; doc_id: string; data: unknown }[]
+  expect(w?.op).toBe('set')
+  expect(w?.doc_id.startsWith('jose-1114-2132-')).toBe(true)
+  expect(w?.data).toEqual({ name: NAME, md: DRAFT, savedAt: 100 })
+  expect(store.get('artifactSynced')).toEqual({ [PAGE]: { [NAME]: 100 } })
+
+  files = []
+  await clock.advance(3_000)
+  const last = dbCalls(tools).filter(t => t.action === 'batch').at(-1)?.writes as { data: Record<string, unknown> }[]
+  expect(last[0]?.data.name).toBe(NAME)
+  expect(last[0]?.data.deleted).toBe(true)
+  expect(store.get('artifactSynced')).toEqual({ [PAGE]: {} })
+})
+
+test('artifact: Sent on the phone moves the file into sent/, but a draft saved again after the tap stays', ARTIFACT, async ($, on) => {
+  const clock = mock.clock(on)
+  const EDITED = 'nick-1114-2140.md'
+  memStore(on, { artifactSynced: { [PAGE]: { [NAME]: 100, [EDITED]: 900 } } })
+  const { runs, toasts } = setup(on, {
+    files: () => [{ name: NAME, mtimeMs: 100 }, { name: EDITED, mtimeMs: 900 }],
+    tool: i => ({ text: i.tool === 'Artifact' ? LISTED : i.action === 'query' ? [tomb(NAME, 500, true), tomb(EDITED, 500, false)].join('\n') : 'ok' }),
+  })
+  await $.session.start(SESSION)
+  await clock.advance(30_000)
+  await clock.advance(1_000)
+  expect(runs).toContainEqual(['mv', `${DIR}/${NAME}`, `${DIR}/sent/${NAME}`])
+  expect(runs.some(r => r[0] === 'mv' && r[1] === `${DIR}/${EDITED}`)).toBe(false)
+  expect(toasts).toContain('From the phone: 1 marked sent')
+})
+
+test('artifact: a delete on the phone moves the file to the Trash', ARTIFACT, async ($, on) => {
+  const clock = mock.clock(on)
+  memStore(on, { artifactSynced: { [PAGE]: { [NAME]: 100 } } })
+  const { runs } = setup(on, {
+    files: () => [{ name: NAME, mtimeMs: 100 }],
+    tool: i => ({ text: i.tool === 'Artifact' ? LISTED : i.action === 'query' ? tomb(NAME, 500, false) : 'ok' }),
+  })
+  await $.session.start(SESSION)
+  await clock.advance(31_000)
+  expect(runs.some(r => r[0] === 'mv' && r[1] === `${DIR}/${NAME}` && String(r[2]).startsWith('/Users/test/.Trash/'))).toBe(true)
+})
+
+test('artifact: no Slack Drafts page in the account means no database calls and one nudge', ARTIFACT, async ($, on) => {
+  const clock = mock.clock(on)
+  memStore(on)
+  const { tools, toasts } = setup(on, {
+    files: () => [{ name: NAME, mtimeMs: 100 }],
+    tool: () => ({ text: listing(`- (mine) Week Ending October 14 ${DASH} https://claude.ai/artifact/Other1 ${DASH} updated 2026-11-06`) }),
+  })
+  await $.session.start(SESSION)
+  await clock.advance(40_000)
+  expect(dbCalls(tools)).toEqual([])
+  expect(toasts).toEqual(['slack-drafts-mobile: run /slack-drafts-mobile to put your Slack drafts on your phone'])
+})
+
+test("artifact: a session that can't list Artifacts keeps the drafts on the Mac and says so once", ARTIFACT, async ($, on) => {
+  const clock = mock.clock(on)
+  const store = memStore(on)
+  const { tools, toasts } = setup(on, { files: () => [{ name: NAME, mtimeMs: 100 }], tool: () => ({ isError: true, text: 'Artifacts are turned off for this organization' }) })
+  await $.session.start(SESSION)
+  await clock.advance(10 * 60_000)
+  expect(dbCalls(tools)).toEqual([])
+  expect(toasts.filter(t => t.includes("can't list your Artifacts")).length).toBe(1)
+  expect(store.get('nudged')).toBe(undefined)
+})
+
+test('artifact: a page that no longer opens is looked up again, and the drafts go to the one found', ARTIFACT, async ($, on) => {
+  const clock = mock.clock(on)
+  memStore(on)
+  const NEW = 'https://claude.ai/artifact/Pinned2'
+  let listed = LISTED
+  const { tools } = setup(on, {
+    files: () => [{ name: NAME, mtimeMs: 100 }],
+    tool: i => {
+      if (i.tool === 'Artifact') return { text: listed }
+      if (i.url === PAGE) {
+        listed = listing(`- (mine, pinned) Slack Drafts ${DASH} ${NEW} ${DASH} updated 2026-11-15`)
+        return { isError: true, text: 'No such artifact, or you cannot open it' }
+      }
+      return { text: 'ok' }
+    },
+  })
+  await $.session.start(SESSION)
+  await clock.advance(3_000)
+  await clock.advance(3_000)
+  expect(dbCalls(tools).map(t => t.url)).toEqual([PAGE, NEW])
+})
+
+test('no page picked: a Vercel page set up before 0.3 keeps syncing, and the Artifacts are left alone', async ($, on) => {
+  const clock = mock.clock(on)
+  memStore(on)
+  const { calls, tools } = setup(on, { files: () => [{ name: NAME, mtimeMs: 100 }], tool: () => ({ text: LISTED }) })
+  await $.session.start(SESSION)
+  await clock.advance(6_000)
+  expect(calls.filter(c => c.method === 'PUT').length).toBe(1)
+  expect(tools).toEqual([])
+})
+
+test('no page picked and no Vercel page: drafts go to the Artifact page', async ($, on) => {
+  const clock = mock.clock(on)
+  memStore(on)
+  const { calls, tools } = setup(on, { linked: false, files: () => [{ name: NAME, mtimeMs: 100 }], tool: i => ({ text: i.tool === 'Artifact' ? LISTED : 'ok' }) })
+  await $.session.start(SESSION)
+  await clock.advance(3_000)
+  expect(calls).toEqual([])
+  expect(dbCalls(tools).filter(t => t.action === 'batch').length).toBe(1)
+})
+
+test('artifact: after moving a tapped draft, the push deletes the tap and tells the page the file moved', ARTIFACT, async ($, on) => {
+  const clock = mock.clock(on)
+  const store = memStore(on, { artifactSynced: { [PAGE]: { [NAME]: 100 } } })
+  const env: { runs: string[][] } = { runs: [] }
+  const moved = () => env.runs.some(r => r[0] === 'mv' && r[1] === `${DIR}/${NAME}`)
+  const s = setup(on, {
+    files: () => (moved() ? [] : [{ name: NAME, mtimeMs: 100 }]),
+    tool: i => ({ text: i.tool === 'Artifact' ? LISTED : i.action === 'query' ? tomb(NAME, 500, true) : 'ok' }),
+  })
+  env.runs = s.runs
+  await $.session.start(SESSION)
+  await clock.advance(31_000)
+  const batch = dbCalls(s.tools).filter(t => t.action === 'batch').at(-1)?.writes as Record<string, unknown>[]
+  expect(batch.map(w => w.op)).toEqual(['set', 'delete'])
+  expect((batch[0]?.data as Record<string, unknown>).deleted).toBe(true)
+  expect(batch[1]).toEqual({ op: 'delete', collection: 'drafts', doc_id: `${NAME}-phone-500`, if_version: 1 })
+  expect(store.get('artifactSynced')).toEqual({ [PAGE]: {} })
+})
+
+test('artifact: more than 50 drafts go in batches of 50, and a batch that fails keeps the ones before it sent', ARTIFACT, async ($, on) => {
+  const clock = mock.clock(on)
+  const store = memStore(on)
+  const many = Array.from({ length: 60 }, (_, i) => ({ name: `d${i}-1114-2132.md`, mtimeMs: 100 }))
+  let batches = 0
+  const { tools, toasts } = setup(on, {
+    files: () => many,
+    tool: i => {
+      if (i.tool === 'Artifact') return { text: LISTED }
+      batches++
+      return batches === 2 ? { isError: true, text: 'batch body over 1 MiB' } : { text: 'ok' }
+    },
+  })
+  await $.session.start(SESSION)
+  await clock.advance(3_000)
+  const sizes = dbCalls(tools).map(t => (t.writes as unknown[]).length)
+  expect(sizes).toEqual([50, 10])
+  expect(Object.keys((store.get('artifactSynced') as Record<string, Record<string, number>>)[PAGE] ?? {}).length).toBe(50)
+  expect(toasts.filter(t => t.includes('the phone page failed')).length).toBe(1)
+  // the next tick sends only the 10 that didn't land
+  await clock.advance(3_000)
+  expect(dbCalls(tools).map(t => (t.writes as unknown[]).length)).toEqual([50, 10, 10])
 })

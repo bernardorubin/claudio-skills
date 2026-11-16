@@ -1,6 +1,6 @@
 # claudio-skills repo (the claudio marketplace)
 
-This repo is a Claude Code **plugin marketplace**. It is mostly not application code: JSON manifests + markdown skill definitions consumed by the Claude Code harness, plus the mods' hooks modules. The one exception is `plugins/slack-drafts-mobile/app/`, a small Vercel app with its own `package.json` and `node --test` tests.
+This repo is a Claude Code **plugin marketplace**. It is mostly not application code: JSON manifests + markdown skill definitions consumed by the Claude Code harness, plus the mods' hooks modules. The one exception is `plugins/slack-drafts-mobile/app/`, a small Vercel app with its own `package.json` and `node --test` tests (`artifact/` beside it holds the Artifact version of the page).
 
 ## Repo layout
 
@@ -9,7 +9,7 @@ claudio-skills/                       # repo folder; the plugin inside is named 
 ├── .claude-plugin/
 │   └── marketplace.json              # marketplace manifest — lists every plugin
 ├── plugins/
-│   ├── slack-drafts-mobile/           # optional plugin: a mod, its setup skill and a Vercel app (app/)
+│   ├── slack-drafts-mobile/           # optional plugin: a mod, its setup skill, an Artifact page (artifact/) and a Vercel app (app/)
 │   └── claudio/                       # the main plugin (see below)
 │       ├── .claude-plugin/
 │       │   └── plugin.json           # plugin manifest
@@ -26,7 +26,7 @@ claudio-skills/                       # repo folder; the plugin inside is named 
 
 - **Marketplace name**: `claudio` (set in `.claude-plugin/marketplace.json`)
 - **GitHub identifier**: `bernardorubin/claudio-skills` (used in `/plugin marketplace add`)
-- **Plugins**: `claudio` — bundles 34 skills (no commands) and one hooks module carrying two mods. The `pr-review` skill itself supports three modes: PR review, local diff review, and full-repo audit. Also `slack-drafts-mobile` (`plugins/slack-drafts-mobile/`): an optional mod plus a setup skill and a small Vercel app (`app/`) that puts the drafts on a phone page on the user's own Vercel account; it shares only the drafts folder with claudio. Keep each plugin's `version` in sync with its marketplace entry.
+- **Plugins**: `claudio` — bundles 34 skills (no commands) and one hooks module carrying two mods. The `pr-review` skill itself supports three modes: PR review, local diff review, and full-repo audit. Also `slack-drafts-mobile` (`plugins/slack-drafts-mobile/`): an optional mod plus a setup skill and a phone page in two forms the setup lets the user pick: a pinned claude.ai Artifact (`artifact/`, the default, found by name in every session) or a small Vercel app (`app/`) on the user's own Vercel account; it shares only the drafts folder with claudio. Keep each plugin's `version` in sync with its marketplace entry.
 - **Install path** (after `/plugin install`): `~/.claude/plugins/cache/claudio/claudio/<version>/`
 
 When users update the marketplace and reinstall, the harness pulls from `main` of this repo via the `git-subdir` source defined in `marketplace.json`.

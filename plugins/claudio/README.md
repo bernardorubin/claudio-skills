@@ -391,7 +391,7 @@ Desktop draws an animated SVG (still under reduced motion); the terminal draws a
 
 ### `/slack-drafts`
 
-A pane for the drafts `/write-slack-message` saves to `~/Desktop/slack-drafts/`. For the same drafts on your iPhone, with Slack formatting intact, install the optional [`slack-drafts-mobile`](../slack-drafts-mobile/README.md) plugin: it syncs this folder to a small page on your own Vercel account.
+A pane for the drafts `/write-slack-message` saves to `~/Desktop/slack-drafts/`. For the same drafts on your iPhone, with Slack formatting intact, install the optional [`slack-drafts-mobile`](../slack-drafts-mobile/README.md) plugin: it syncs this folder to a pinned Slack Drafts Artifact you open in the Claude app, or, if you pick it, a small page on your own Vercel account.
 
 - `/slack-drafts` opens the pane: one card per draft, newest first, rendered as Markdown with each `@name` in purple (a typed @ pastes as plain text, so those are the ones to re-tag in Slack), with where to post it and who to tag (linked) above the message when the skill found them.
 - A draft whose header lists `attach:` files (screenshots, recordings) shows a 📎 button per file that selects it in Finder, ready to drag into the Slack message.
@@ -402,7 +402,7 @@ A pane for the drafts `/write-slack-message` saves to `~/Desktop/slack-drafts/`.
 
 **On the phone, in the session itself.** When you follow a session in the Claude mobile app, each saved draft shows as a card under the Write that saved it.
 
-**Before 5.0.0** the phone page was a claude.ai artifact synced through the `ArtifactData` tool, which only works in sessions that have the artifact tools. 5.0.0 removes it, with the **Slack drafts idle sync** option and its `PreToolUse` hook. The first session after the update says so once, clears the page's saved link and moves `~/.config/claudio/slack-drafts-phone-url` (the link copy 4.x kept) to the Trash. Install `slack-drafts-mobile` (`/plugin install slack-drafts-mobile@claudio`) and run `/slack-drafts-mobile` instead; the old artifact page stops updating and can be deleted from claude.ai.
+**Before 5.0.0** the phone page was a claude.ai artifact synced through the `ArtifactData` tool, which only works in sessions that have the artifact tools. 5.0.0 removes it, with the **Slack drafts idle sync** option and its `PreToolUse` hook. The first session after the update says so once, clears the page's saved link and moves `~/.config/claudio/slack-drafts-phone-url` (the link copy 4.x kept) to the Trash. Install `slack-drafts-mobile` (`/plugin install slack-drafts-mobile@claudio`) and run `/slack-drafts-mobile` instead. Its default Artifact page is the same pinned Slack Drafts page: the setup updates it in place, so keep it; extra Slack Drafts pages 4.x published can be deleted from claude.ai.
 
 ### Developing the mods
 
@@ -412,7 +412,7 @@ The `slack-drafts-mobile` page's `slack-html.js` is built from `hooks/slack-html
 npx esbuild@0.24.2 hooks/slack-html.ts --bundle --format=iife --global-name=SlackHtml --target=es2020 --outfile=../slack-drafts-mobile/app/public/slack-html.js
 ```
 
-Then, once that version of `slack-drafts-mobile` is installed, `/slack-drafts-mobile` redeploys the page (it compares the plugin's copy with the deployed one). Check any hooks change with:
+Then, once that version of `slack-drafts-mobile` is installed, `/slack-drafts-mobile` updates the page you picked (it compares the plugin's copy with the published or deployed one): it republishes the Artifact page, or redeploys the Vercel page. Check any hooks change with:
 
 ```
 claude plugin validate .
