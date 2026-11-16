@@ -264,8 +264,8 @@
 
   // Both sides only add rows (a new row per save, a tombstone per delete), so the
   // newest row per draft name wins and the rest are leftovers this page tidies once.
-  // A phone delete stays until the Mac answers it with its own tombstone, which says
-  // the file is in the Trash. ponytail: a draft no Mac holds keeps its rows, hidden.
+  // A phone tap stays until the Mac answers it with its own tombstone, which says
+  // the file has moved (to sent/ or the Trash). ponytail: a draft no Mac holds keeps its rows, hidden.
   const fold = docs => {
     const byName = new Map();
     for (const doc of docs) {

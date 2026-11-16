@@ -217,13 +217,16 @@ const docId = (name: string, at: number) =>
   `${name.replace(/\.md$/, '').replace(/[^A-Za-z0-9_.~:@+-]/g, '_')}-${Math.round(at)}`
 
 // A read of the page comes back as one JSON document per line between two marker lines.
-type Tomb = { name: string; deleted?: unknown; sent?: unknown; savedAt?: unknown }
-const rowsOf = (text: string): Tomb[] =>
+// A tap is a row the page wrote: { name, deleted: true, sent, from: 'phone', savedAt }.
+type Tap = { id: string; version: number; name: string; at: number; sent: boolean }
+const tapsOf = (text: string): Tap[] =>
   text.split('\n').flatMap(line => {
     if (!line.startsWith('{')) return []
     try {
-      const { data } = JSON.parse(line) as { data?: Partial<Tomb> }
-      return typeof data?.name === 'string' ? [{ ...data, name: data.name }] : []
+      const { id, version, data } = JSON.parse(line) as { id?: unknown; version?: unknown; data?: Record<string, unknown> }
+      if (typeof id !== 'string' || typeof version !== 'number' || typeof data?.name !== 'string') return []
+      if (data.from !== 'phone' || data.deleted !== true) return []
+      return [{ id, version, name: data.name, at: Number(data.savedAt) || 0, sent: data.sent === true }]
     } catch {
       return []
     }
@@ -237,62 +240,73 @@ const syncedOf = async ($: EngineInterface) => ((await $.store.get('artifactSync
 const failed = ($: EngineInterface, s: Sync, r: { deny?: string; isError?: boolean; text?: string }) => {
   if (r.deny === undefined && !r.isError) return false
   const why = (r.deny ?? r.text ?? 'no reason given').slice(0, 160)
-  if (/no such artifact|not found/i.test(why)) {
+  // the tool's words for a page this account can't open: "no such artifact for this account (it was deleted, ...)"
+  if (/no such artifact/i.test(why)) {
     s.page = null
     $.clock.after(0, () => void findPage($, s).catch(() => undefined))
   } else warn($, s, `the phone page failed (${why}). Drafts stay on the Mac and sync once it answers.`, 'failed')
   return true
 }
 
-const pushPage = async ($: EngineInterface, s: Sync, url: string) => {
+type Write =
+  | { op: 'set'; collection: string; doc_id: string; data: Record<string, unknown> }
+  | { op: 'delete'; collection: string; doc_id: string; if_version: number }
+
+// `handled`: taps acted on, deleted with this push so a draft restored from the Trash isn't moved again.
+const pushPage = async ($: EngineInterface, s: Sync, url: string, handled: Tap[] = []) => {
   const files = await listFiles($)
   if (files === null) return
   const synced = (await syncedOf($))[url] ?? {}
   const changed = files.filter(f => synced[f.name] !== f.mtimeMs)
   const gone = Object.keys(synced).filter(name => !files.some(f => f.name === name))
-  if (changed.length === 0 && gone.length === 0) return
+  if (changed.length === 0 && gone.length === 0 && handled.length === 0) return
   const now = Date.now()
-  const next = { ...synced }
-  const writes: { op: 'set'; collection: string; doc_id: string; data: Record<string, unknown> }[] = []
+  // each write with what it records once its batch lands, so a batch that keeps failing doesn't resend the ones before it
+  const items: { write: Write; record: (n: Record<string, number>) => void }[] = []
   for (const f of changed) {
     const md = await $.fs.read(f.path).catch(() => null)
     if (md === null) continue
-    writes.push({ op: 'set', collection: 'drafts', doc_id: docId(f.name, now), data: { name: f.name, md, savedAt: f.mtimeMs } })
-    next[f.name] = f.mtimeMs
+    const data = { name: f.name, md, savedAt: f.mtimeMs }
+    items.push({ write: { op: 'set', collection: 'drafts', doc_id: docId(f.name, now), data }, record: n => void (n[f.name] = f.mtimeMs) })
   }
   for (const name of gone) {
-    writes.push({ op: 'set', collection: 'drafts', doc_id: docId(name, now), data: { name, deleted: true, savedAt: now } })
-    delete next[name]
+    const data = { name, deleted: true, savedAt: now }
+    items.push({ write: { op: 'set', collection: 'drafts', doc_id: docId(name, now), data }, record: n => void delete n[name] })
   }
-  for (let i = 0; i < writes.length; i += BATCH) {
+  // last, so a tap the page tidied first can't hold up the drafts
+  for (const t of handled) items.push({ write: { op: 'delete', collection: 'drafts', doc_id: t.id, if_version: t.version }, record: () => undefined })
+  const done = { ...synced }
+  for (let i = 0; i < items.length; i += BATCH) {
+    const batch = items.slice(i, i + BATCH)
     const r = await $.tool
-      .call({ tool: 'ArtifactData', action: 'batch', url, writes: writes.slice(i, i + BATCH) })
+      .call({ tool: 'ArtifactData', action: 'batch', url, writes: batch.map(x => x.write) })
       .catch((e: unknown) => ({ deny: e instanceof Error ? e.message : String(e) }))
-    if (failed($, s, r)) return
+    if (failed($, s, r)) break
+    for (const x of batch) x.record(done)
   }
-  await $.store.set('artifactSynced', { ...(await syncedOf($)), [url]: next })
+  await $.store.set('artifactSynced', { ...(await syncedOf($)), [url]: done })
 }
 
 // Reads the phone's taps every 30 s while this Mac has a draft on the page, one session at a time (the shared stamp).
 const pullPage = async ($: EngineInterface, s: Sync, url: string) => {
   if (Object.keys((await syncedOf($))[url] ?? {}).length === 0) return
   const now = await $.clock.now()
-  if (now - Number((await $.store.get('artifactPulledAt')) ?? 0) < ART_PULL_MS - 500) return
-  await $.store.set('artifactPulledAt', now)
+  // per page, so a session still on an older page doesn't hold up another's pulls
+  const stamp = `artifactPulledAt:${url}`
+  if (now - Number((await $.store.get(stamp)) ?? 0) < ART_PULL_MS - 500) return
+  await $.store.set(stamp, now)
   const r = await $.tool
     .call({ tool: 'ArtifactData', action: 'query', url, collection: 'drafts', query: { where: [['from', '==', 'phone']], limit: 1000 } })
     .catch((e: unknown) => ({ deny: e instanceof Error ? e.message : String(e) }))
   if (failed($, s, r)) return
-  const latest = new Map<string, { at: number; sent: boolean }>()
-  for (const row of rowsOf(('text' in r && r.text) || '')) {
-    if (row.deleted !== true) continue
-    const at = Number(row.savedAt) || 0
-    if (at >= (latest.get(row.name)?.at ?? -1)) latest.set(row.name, { at, sent: row.sent === true })
-  }
+  const taps = tapsOf(('text' in r && r.text) || '')
+  const latest = new Map<string, Tap>()
+  for (const t of taps) if (t.at >= (latest.get(t.name)?.at ?? -1)) latest.set(t.name, t)
   const files = await listFiles($)
   if (files === null) return
   // a draft saved again on the Mac after the tap stays, and its next push reopens it on the page
   const doomed = files.filter(f => (latest.get(f.name)?.at ?? -1) >= f.mtimeMs)
+  const handled: Tap[] = []
   let sent = 0
   let trashed = 0
   for (const f of doomed) {
@@ -302,14 +316,15 @@ const pullPage = async ($: EngineInterface, s: Sync, url: string) => {
       warn($, s, `could not move ${f.name} after the phone's tap (${moved.stderr.trim().slice(0, 120) || `exit ${moved.exitCode}`}).`)
       continue
     }
+    handled.push(...taps.filter(t => t.name === f.name))
     if (isSent) sent++
     else trashed++
   }
   const parts = [sent > 0 && `${sent} marked sent`, trashed > 0 && `${trashed} moved to the Trash`].filter(Boolean)
   if (parts.length === 0) return
   $.ui.toast(`From the phone: ${parts.join(', ')}`)
-  // the moved files' tombstones tell the page to tidy the tapped rows away
-  await pushPage($, s, url)
+  // the moved files' tombstones tell the page to tidy the draft's rows away, and the handled taps go
+  await pushPage($, s, url, handled)
 }
 
 const pageTick = async ($: EngineInterface, s: Sync, kind: 'push' | 'pull') => {
@@ -328,7 +343,10 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     const ran = await next(e)
-    if (options.page === 'vercel') {
+    // `auto` (no pick yet): a Vercel page set up before 0.3 (its link in the keychain) keeps syncing, as an update skips the options screen
+    const page =
+      options.page === 'artifact' || options.page === 'vercel' ? options.page : (await secret($, 'url').catch(() => '')) !== '' ? 'vercel' : 'artifact'
+    if (page === 'vercel') {
       await checkLink($, s).catch(() => undefined)
       if (s.link === null) await nudge($)
       // set up later (or the token rotated): the next minute's check picks it up, no reload needed

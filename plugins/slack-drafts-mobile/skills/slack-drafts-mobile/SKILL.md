@@ -30,14 +30,20 @@ kc() { security find-generic-password -s claudio-slack-drafts-mobile -a "$1" -w;
 
 1. **Where the drafts live, first.** The page shows the drafts in one folder: `$SLACK_DRAFTS_DIR` when it's set (`printenv SLACK_DRAFTS_DIR`), else `$HOME/Desktop/slack-drafts`. Write every folder as an absolute path, since `~` doesn't expand inside the quotes below. `/write-slack-message` saves there only when the folder exists, so without it the page stays empty. When it exists, name it in one line and go on. When it doesn't, ask the user before anything else where their drafts should go, with that folder first (recommended) and another folder second:
    - That folder: `mkdir -p "<it>"`.
-   - Another folder: `mkdir -p "<it>"`, then set `SLACK_DRAFTS_DIR` to its absolute path in the `env` block of `~/.claude/settings.json`, keeping everything else in the file: `jq --arg d "<it>" '.env.SLACK_DRAFTS_DIR = $d' ~/.claude/settings.json > "$TMPDIR/sdm-settings.json" && mv "$TMPDIR/sdm-settings.json" ~/.claude/settings.json` (with no settings file yet, write `{"env":{"SLACK_DRAFTS_DIR":"<it>"}}`). Sessions read `env` when they start, so the report tells the user to restart Claude Code. claudio's `/slack-drafts` pane, `/write-slack-message` and this plugin's mod all use the folder.
+   - Another folder: `mkdir -p "<it>"`, then set `SLACK_DRAFTS_DIR` to its absolute path in the `env` block of `~/.claude/settings.json`, keeping everything else in the file: `t=$(mktemp) && jq --arg d "<it>" '.env.SLACK_DRAFTS_DIR = $d' ~/.claude/settings.json > "$t" && cat "$t" > ~/.claude/settings.json; rm -f "$t"` (with no settings file yet, write `{"env":{"SLACK_DRAFTS_DIR":"<it>"}}`). Sessions read `env` when they start, so the report tells the user to restart Claude Code. claudio's `/slack-drafts` pane, `/write-slack-message` and this plugin's mod all use the folder.
 
    The user's answer is the opt-in the folder stands for, so making it here is fine; never make it without asking.
-2. **Which page.** Read the current pick: `jq -r '.pluginConfigs["slack-drafts-mobile@claudio"].options.page // empty' ~/.claude/settings.json`. An `artifact` or `vercel` argument is the pick. With none given and none set, ask the user, Artifact first (recommended):
+2. **Which page.** Read the current pick: `jq -r '.pluginConfigs["slack-drafts-mobile@claudio"].options.page // empty' ~/.claude/settings.json`. An `artifact` or `vercel` argument is the pick; else the one set. With neither (empty or `auto`), ask the user. Recommend Vercel when `kc url 2>/dev/null` finds a link (a Vercel page set up before 0.3, which the mod keeps syncing while no page is picked), else Artifact:
    - Artifact: opens in the Claude app, nothing to deploy, but it needs Artifacts on their claude.ai account, and drafts only sync while a session with the Artifact tools is open.
    - Vercel: works in every session and on any account, but needs the Vercel CLI, an Upstash store and a GitHub OAuth app.
 
-   For Artifact go to **section A**. For Vercel continue with step 3 and sections 2 to 7. With a pick already set and no argument, run that page's Check (section A step 6, or section 6) and stop when it passes.
+   When the pick differs from the one set, record it now and tell the user to run `/reload-plugins` at the end (the mod reads the option when it loads). The write goes through the file in place, so a symlinked settings file stays one:
+
+   ```bash
+   t=$(mktemp) && jq --arg p <artifact|vercel> '.pluginConfigs["slack-drafts-mobile@claudio"].options.page = $p' ~/.claude/settings.json > "$t" && cat "$t" > ~/.claude/settings.json; rm -f "$t"
+   ```
+
+   For Artifact go to **section A**. For Vercel continue with step 3, which leads into sections 2 to 7. The other page's setup stays, so switching back is `/slack-drafts-mobile <the other one>`.
 3. `command -v vercel`: when it's missing, tell the user to run `pnpm i -g vercel` and stop.
 4. `vercel whoami`: when it isn't logged in, ask the user to run `vercel login` in a terminal (it opens a browser), then continue. Then `vercel teams ls`, and keep the slug of the "<username>'s projects" team as `SCOPE`.
 5. `kc url 2>/dev/null`: when a link already exists, run **Check** (section 6) first. When it answers 200 and no argument was given, compare the plugin's page with the deployed copy: `diff -rq -x .vercel -x .env.local -x .gitignore <this skill's base directory>/../../app/ $APP/`. When it lists a difference (a plugin update changed the page), run section 2 step 1, then section 7 (when GitHub sign-in is already set up it goes straight to its deploy); browsers stay signed in. When it lists none and section 7 step 1 finds GitHub sign-in set up, report it and stop, since there's nothing to set up; when GitHub sign-in is missing, run section 7. With `pair`, go straight to section 5; with `--rotate`, run section 2 step 1, then section 3.
@@ -48,12 +54,11 @@ kc() { security find-generic-password -s claudio-slack-drafts-mobile -a "$1" -w;
 2. **Find the page.** `Artifact` with `action: "list"`, `scope: "mine"`, `limit: 200`, and look for lines titled exactly `Slack Drafts`. The mod takes the same one: the first pinned, else the most recent.
 3. **The files.** Copy `<this skill's base directory>/../../artifact/index.html` and `<this skill's base directory>/../../app/public/slack-html.js` into a folder `slack-drafts-page` in the scratchpad, and read both (the Artifact tool publishes only what Claude has read).
 4. **Publish.**
-   - A page was found: `read` it first, and its `slack-html.js` (`action: "read"`, `path: "slack-html.js"`), since a publish that touches an Artifact's file this conversation hasn't read is refused. Then publish the copied `index.html` with `url` set to it and `files: {"slack-html.js": <the copied slack-html.js>}`. That keeps its link, its pin and its drafts, and brings the page up to date.
+   - A page was found: `read` it, and its `slack-html.js` (`action: "read"`, `path: "slack-html.js"`), since a publish that touches an Artifact's file this conversation hasn't read is refused. When both match the plugin's copies (diff the saved `slack-html.js`, and the page's HTML against `index.html`), it's up to date: skip to step 5. Otherwise publish the copied `index.html` with `url` set to it, `files: {"slack-html.js": <the copied slack-html.js>}`, the `capabilities` below (so its database stays readable and writable by the owner alone) and `pin: true`. That keeps its link and its drafts.
    - None: publish it new with `title: "Slack Drafts"`, the same `files`, `capabilities: {"db": {"rules": [{"path": "drafts", "read": "owner", "write": "owner"}]}, "user": {}}`, `icon: "message"` and `pin: true`.
 
-   Then stop this session's watch on it (`ArtifactComments`, `action: "watch"`, `on: false`, its `url`), so a resumed session doesn't report a comment monitor for it. The mod never publishes; only this step does.
-5. **Record the pick:** `jq --arg p artifact '.pluginConfigs["slack-drafts-mobile@claudio"].options.page = $p' ~/.claude/settings.json > "$TMPDIR/sdm-settings.json" && mv "$TMPDIR/sdm-settings.json" ~/.claude/settings.json`, keeping everything else in the file, and tell the user to run `/reload-plugins` (the mod reads the option when it loads). Any Vercel page's keychain items stay, so switching back is `/slack-drafts-mobile vercel`.
-6. **Check.** `ArtifactData` with `action: "query"`, `collection: "drafts"`, `query: {"limit": 1}` on the page: say whether it answered, never what the rows hold. When the listing shows more than one Slack Drafts page, name the extras and offer to delete them, one confirmation each, since the mod syncs only one.
+   After a publish, stop this session's watch on the page (`ArtifactComments`, `action: "watch"`, `on: false`, its `url`), so a resumed session doesn't report a comment monitor for it. The mod never publishes; only this step does.
+5. **Check.** `ArtifactData` with `action: "query"`, `collection: "drafts"`, `query: {"limit": 1}` on the page: say whether it answered, never what the rows hold. When the listing shows more than one Slack Drafts page, name the extras and offer to delete them, one confirmation each, since the mod syncs only one.
 
 ## 2. Project and store
 
@@ -81,7 +86,7 @@ An env change only reaches the page with a new deploy, so section 4 always follo
 security add-generic-password -U -s claudio-slack-drafts-mobile -a url -w "https://<that domain>"
 ```
 
-Record the pick with section A step 5's command, `vercel` in place of `artifact`. On a first setup, continue with section 7 (GitHub sign-in), then section 5.
+On a first setup, continue with section 7 (GitHub sign-in), then section 5.
 
 ## 5. Pair the phone
 
@@ -100,7 +105,7 @@ echo "$code"; [ "$code" = 200 ] || head -c 300 "$TMPDIR/sdm-check"
 
 The body is shown only when the status isn't 200, so drafts never print; read it to pick the case below.
 
-- `200`: working. The mod picks up a new link or token within a minute, no reload needed.
+- `200`: working. The mod picks up a new link or token within a minute, no reload needed (a new page pick does need `/reload-plugins`).
 - `401`: the keychain and Vercel disagree. Run section 3 with `--rotate`, then 4. Browsers then sign in again, with GitHub or a code (section 5).
 - `502` with "no Redis store": section 2 step 3.
 - A Vercel sign-in page (HTML, or a `401` that isn't JSON): Deployment Protection covers the production domain. Tell the user to turn it off for production in the project's Settings, Deployment Protection, and say why: the page has its own token.

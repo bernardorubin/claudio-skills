@@ -30,7 +30,7 @@ The skill first asks where your drafts should live (`~/Desktop/slack-drafts` unl
 
 Run it again to check the setup (after a plugin update that changed the Vercel page, this also redeploys it; browsers stay signed in), `/slack-drafts-mobile artifact` or `/slack-drafts-mobile vercel` to switch pages, `/slack-drafts-mobile pair` for a code, and `/slack-drafts-mobile --rotate` for a new token (every browser then signs in again).
 
-Upgrading from 0.2 with the Vercel page: 0.3 defaults to the Artifact page, so run `/slack-drafts-mobile vercel` to keep the Vercel one.
+Upgrading from 0.2 with the Vercel page: it keeps syncing there until you pick a page. Run `/slack-drafts-mobile artifact` to move to the Artifact page.
 
 ## How it syncs
 

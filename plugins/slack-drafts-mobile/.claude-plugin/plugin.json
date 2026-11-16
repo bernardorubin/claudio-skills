@@ -13,9 +13,9 @@
     "page": {
       "type": "string",
       "title": "Phone page",
-      "description": "Where your drafts go: artifact, a pinned Slack Drafts Artifact you open in the Claude app (needs Artifacts on your claude.ai account), or vercel, a page on your own Vercel account with GitHub sign-in that works in every session. /slack-drafts-mobile sets this up.",
-      "options": ["artifact", "vercel"],
-      "default": "artifact"
+      "description": "Where your drafts go: artifact, a pinned Slack Drafts Artifact you open in the Claude app (needs Artifacts on your claude.ai account), or vercel, a page on your own Vercel account with GitHub sign-in that works in every session. /slack-drafts-mobile sets this up. auto, the default, means vercel when a Vercel page from before 0.3 is set up, else artifact.",
+      "options": ["auto", "artifact", "vercel"],
+      "default": "auto"
     }
   }
 }

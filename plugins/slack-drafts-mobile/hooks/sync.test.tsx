@@ -74,6 +74,7 @@ const setup = (on: On, opts: Opts) => {
 
 const SESSION = { cwd: '/Users/test', surface: 'desktop', isInteractive: true } as const
 const VERCEL = { options: { page: 'vercel' } } as const
+const ARTIFACT = { options: { page: 'artifact' } } as const
 
 test('vercel: not set up: one nudge, no requests, and no keychain item read as a link', VERCEL, async ($, on) => {
   const clock = mock.clock(on)
@@ -233,7 +234,7 @@ const tomb = (name: string, savedAt: number, sent: boolean) =>
   `=== BEGIN ARTIFACT DB 1 ===\n${JSON.stringify({ id: `${name}-phone-${savedAt}`, data: { deleted: true, from: 'phone', name, savedAt, sent }, version: 1 })}\n=== END ARTIFACT DB 1 ===`
 const dbCalls = (tools: Record<string, unknown>[]) => tools.filter(t => t.tool === 'ArtifactData')
 
-test('artifact: a draft goes to the pinned Slack Drafts page as a new row, and a removed one as a tombstone', async ($, on) => {
+test('artifact: a draft goes to the pinned Slack Drafts page as a new row, and a removed one as a tombstone', ARTIFACT, async ($, on) => {
   const clock = mock.clock(on)
   const store = memStore(on)
   let files = [{ name: NAME, mtimeMs: 100 }]
@@ -258,7 +259,7 @@ test('artifact: a draft goes to the pinned Slack Drafts page as a new row, and a
   expect(store.get('artifactSynced')).toEqual({ [PAGE]: {} })
 })
 
-test('artifact: Sent on the phone moves the file into sent/, but a draft saved again after the tap stays', async ($, on) => {
+test('artifact: Sent on the phone moves the file into sent/, but a draft saved again after the tap stays', ARTIFACT, async ($, on) => {
   const clock = mock.clock(on)
   const EDITED = 'nick-1114-2140.md'
   memStore(on, { artifactSynced: { [PAGE]: { [NAME]: 100, [EDITED]: 900 } } })
@@ -274,7 +275,7 @@ test('artifact: Sent on the phone moves the file into sent/, but a draft saved a
   expect(toasts).toContain('From the phone: 1 marked sent')
 })
 
-test('artifact: a delete on the phone moves the file to the Trash', async ($, on) => {
+test('artifact: a delete on the phone moves the file to the Trash', ARTIFACT, async ($, on) => {
   const clock = mock.clock(on)
   memStore(on, { artifactSynced: { [PAGE]: { [NAME]: 100 } } })
   const { runs } = setup(on, {
@@ -286,7 +287,7 @@ test('artifact: a delete on the phone moves the file to the Trash', async ($, on
   expect(runs.some(r => r[0] === 'mv' && r[1] === `${DIR}/${NAME}` && String(r[2]).startsWith('/Users/test/.Trash/'))).toBe(true)
 })
 
-test('artifact: no Slack Drafts page in the account means no database calls and one nudge', async ($, on) => {
+test('artifact: no Slack Drafts page in the account means no database calls and one nudge', ARTIFACT, async ($, on) => {
   const clock = mock.clock(on)
   memStore(on)
   const { tools, toasts } = setup(on, {
@@ -299,7 +300,7 @@ test('artifact: no Slack Drafts page in the account means no database calls and 
   expect(toasts).toEqual(['slack-drafts-mobile: run /slack-drafts-mobile to put your Slack drafts on your phone'])
 })
 
-test("artifact: a session that can't list Artifacts keeps the drafts on the Mac and says so once", async ($, on) => {
+test("artifact: a session that can't list Artifacts keeps the drafts on the Mac and says so once", ARTIFACT, async ($, on) => {
   const clock = mock.clock(on)
   const store = memStore(on)
   const { tools, toasts } = setup(on, { files: () => [{ name: NAME, mtimeMs: 100 }], tool: () => ({ isError: true, text: 'Artifacts are turned off for this organization' }) })
@@ -310,7 +311,7 @@ test("artifact: a session that can't list Artifacts keeps the drafts on the Mac 
   expect(store.get('nudged')).toBe(undefined)
 })
 
-test('artifact: a page that no longer opens is looked up again, and the drafts go to the one found', async ($, on) => {
+test('artifact: a page that no longer opens is looked up again, and the drafts go to the one found', ARTIFACT, async ($, on) => {
   const clock = mock.clock(on)
   memStore(on)
   const NEW = 'https://claude.ai/artifact/Pinned2'
@@ -330,4 +331,67 @@ test('artifact: a page that no longer opens is looked up again, and the drafts g
   await clock.advance(3_000)
   await clock.advance(3_000)
   expect(dbCalls(tools).map(t => t.url)).toEqual([PAGE, NEW])
+})
+
+test('no page picked: a Vercel page set up before 0.3 keeps syncing, and the Artifacts are left alone', async ($, on) => {
+  const clock = mock.clock(on)
+  memStore(on)
+  const { calls, tools } = setup(on, { files: () => [{ name: NAME, mtimeMs: 100 }], tool: () => ({ text: LISTED }) })
+  await $.session.start(SESSION)
+  await clock.advance(6_000)
+  expect(calls.filter(c => c.method === 'PUT').length).toBe(1)
+  expect(tools).toEqual([])
+})
+
+test('no page picked and no Vercel page: drafts go to the Artifact page', async ($, on) => {
+  const clock = mock.clock(on)
+  memStore(on)
+  const { calls, tools } = setup(on, { linked: false, files: () => [{ name: NAME, mtimeMs: 100 }], tool: i => ({ text: i.tool === 'Artifact' ? LISTED : 'ok' }) })
+  await $.session.start(SESSION)
+  await clock.advance(3_000)
+  expect(calls).toEqual([])
+  expect(dbCalls(tools).filter(t => t.action === 'batch').length).toBe(1)
+})
+
+test('artifact: after moving a tapped draft, the push deletes the tap and tells the page the file moved', ARTIFACT, async ($, on) => {
+  const clock = mock.clock(on)
+  const store = memStore(on, { artifactSynced: { [PAGE]: { [NAME]: 100 } } })
+  const env: { runs: string[][] } = { runs: [] }
+  const moved = () => env.runs.some(r => r[0] === 'mv' && r[1] === `${DIR}/${NAME}`)
+  const s = setup(on, {
+    files: () => (moved() ? [] : [{ name: NAME, mtimeMs: 100 }]),
+    tool: i => ({ text: i.tool === 'Artifact' ? LISTED : i.action === 'query' ? tomb(NAME, 500, true) : 'ok' }),
+  })
+  env.runs = s.runs
+  await $.session.start(SESSION)
+  await clock.advance(31_000)
+  const batch = dbCalls(s.tools).filter(t => t.action === 'batch').at(-1)?.writes as Record<string, unknown>[]
+  expect(batch.map(w => w.op)).toEqual(['set', 'delete'])
+  expect((batch[0]?.data as Record<string, unknown>).deleted).toBe(true)
+  expect(batch[1]).toEqual({ op: 'delete', collection: 'drafts', doc_id: `${NAME}-phone-500`, if_version: 1 })
+  expect(store.get('artifactSynced')).toEqual({ [PAGE]: {} })
+})
+
+test('artifact: more than 50 drafts go in batches of 50, and a batch that fails keeps the ones before it sent', ARTIFACT, async ($, on) => {
+  const clock = mock.clock(on)
+  const store = memStore(on)
+  const many = Array.from({ length: 60 }, (_, i) => ({ name: `d${i}-1114-2132.md`, mtimeMs: 100 }))
+  let batches = 0
+  const { tools, toasts } = setup(on, {
+    files: () => many,
+    tool: i => {
+      if (i.tool === 'Artifact') return { text: LISTED }
+      batches++
+      return batches === 2 ? { isError: true, text: 'batch body over 1 MiB' } : { text: 'ok' }
+    },
+  })
+  await $.session.start(SESSION)
+  await clock.advance(3_000)
+  const sizes = dbCalls(tools).map(t => (t.writes as unknown[]).length)
+  expect(sizes).toEqual([50, 10])
+  expect(Object.keys((store.get('artifactSynced') as Record<string, Record<string, number>>)[PAGE] ?? {}).length).toBe(50)
+  expect(toasts.filter(t => t.includes('the phone page failed')).length).toBe(1)
+  // the next tick sends only the 10 that didn't land
+  await clock.advance(3_000)
+  expect(dbCalls(tools).map(t => (t.writes as unknown[]).length)).toEqual([50, 10, 10])
 })
