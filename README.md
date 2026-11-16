@@ -4,7 +4,7 @@
 
 <h1 align="center">claudio</h1>
 
-A Claude Code plugin marketplace by Bernardo Rubin. One plugin (`claudio`) bundles everything: the skills, with no command/skill prefixes to type, plus two mods, a usage band above the prompt and a Slack drafts pane. A second, optional plugin (`slack-drafts-mobile`) puts those drafts on a phone page on your own Vercel account.
+A Claude Code plugin marketplace by Bernardo Rubin. One plugin (`claudio`) bundles everything: the skills, with no command/skill prefixes to type, plus two mods, a usage band above the prompt and a Slack drafts pane. A second, optional plugin (`slack-drafts-mobile`) puts those drafts on a phone page: a pinned Artifact in the Claude app, or a page on your own Vercel account.
 
 ## Installation
 
@@ -80,7 +80,7 @@ See [the slack-drafts-mobile README](plugins/slack-drafts-mobile/README.md) for 
 
 ## slack-drafts-mobile (optional)
 
-A second plugin in this marketplace puts your drafts on a page on your own Vercel account, synced over plain HTTPS, so it works in every Claude Code session, Remote Control included. Install it with `/plugin install slack-drafts-mobile@claudio`, then run `/slack-drafts-mobile`. See [its README](plugins/slack-drafts-mobile/README.md).
+A second plugin in this marketplace puts your drafts on a phone page. By default it's a pinned Slack Drafts Artifact you open in the Claude app; the backup is a page on your own Vercel account with GitHub sign-in, synced over plain HTTPS, which works in every session and on accounts with Artifacts turned off. Install it with `/plugin install slack-drafts-mobile@claudio`, then run `/slack-drafts-mobile`. See [its README](plugins/slack-drafts-mobile/README.md).
 
 ## License
 

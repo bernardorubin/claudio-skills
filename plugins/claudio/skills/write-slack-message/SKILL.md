@@ -259,14 +259,25 @@ Copy for Slack keeps links and code.
 
 So when the user says they are on their phone, on the road, or away from their
 laptop, save exactly as above and change only the report line: link the phone
-page instead of giving the path. The page is on the user's own Vercel account,
-and its link is in the keychain:
+page instead of giving the path. Which page depends on the plugin's `page`
+option:
 
 ```bash
-security find-generic-password -s claudio-slack-drafts-mobile -a url -w 2>/dev/null
+jq -r '.pluginConfigs["slack-drafts-mobile@claudio"].options.page // "artifact"' ~/.claude/settings.json 2>/dev/null
 ```
 
-Empty means no phone page is set up: say the draft is saved, and that the
+- `artifact`: the user's pinned "Slack Drafts" Artifact, opened in the Claude
+  app. Find its link with the `Artifact` tool (`action: "list"`, `scope: "mine"`):
+  the line titled `Slack Drafts`, pinned first. No such line, or no Artifact
+  tool in this session, means the page can't be linked from here: say the draft
+  is saved and is on the page once a session with the Artifact tools is open.
+- `vercel`: the page on the user's own Vercel account, its link in the keychain:
+
+  ```bash
+  security find-generic-password -s claudio-slack-drafts-mobile -a url -w 2>/dev/null
+  ```
+
+With the plugin not installed, or neither link found, say the draft is saved, and that the
 `slack-drafts-mobile` plugin (`/plugin install slack-drafts-mobile@claudio`, then
 `/slack-drafts-mobile`) puts drafts on a phone page. The page only receives
 drafts saved in folder mode.

@@ -1,12 +1,21 @@
 {
   "name": "slack-drafts-mobile",
-  "description": "Your Slack drafts on your phone: a small page on your own Vercel account that /write-slack-message drafts sync to, with Copy for Slack (links and code intact), Sent and delete. Works in every Claude Code session, Remote Control included.",
-  "version": "0.2.1",
+  "description": "Your Slack drafts on your phone: a pinned Slack Drafts Artifact in the Claude app (the default), or a small page on your own Vercel account, that /write-slack-message drafts sync to, with Copy for Slack (links and code intact), Sent and delete.",
+  "version": "0.3.0",
   "author": {
     "name": "Bernardo Rubin",
     "url": "https://github.com/bernardorubin"
   },
   "homepage": "https://github.com/bernardorubin/claudio-skills",
   "repository": "https://github.com/bernardorubin/claudio-skills",
-  "license": "MIT"
+  "license": "MIT",
+  "userConfig": {
+    "page": {
+      "type": "string",
+      "title": "Phone page",
+      "description": "Where your drafts go: artifact, a pinned Slack Drafts Artifact you open in the Claude app (needs Artifacts on your claude.ai account), or vercel, a page on your own Vercel account with GitHub sign-in that works in every session. /slack-drafts-mobile sets this up.",
+      "options": ["artifact", "vercel"],
+      "default": "artifact"
+    }
+  }
 }
