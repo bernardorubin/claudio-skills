@@ -48,7 +48,7 @@ kc() { security find-generic-password -s claudio-slack-drafts-mobile -a "$1" -w;
 2. **Find the page.** `Artifact` with `action: "list"`, `scope: "mine"`, `limit: 200`, and look for lines titled exactly `Slack Drafts`. The mod takes the same one: the first pinned, else the most recent.
 3. **The files.** Copy `<this skill's base directory>/../../artifact/index.html` and `<this skill's base directory>/../../app/public/slack-html.js` into a folder `slack-drafts-page` in the scratchpad, and read both (the Artifact tool publishes only what Claude has read).
 4. **Publish.**
-   - A page was found: `read` it first (a publish to an Artifact this conversation hasn't read is refused), then publish the copied `index.html` with `url` set to it and `files: {"slack-html.js": <the copied slack-html.js>}`. That keeps its link, its pin and its drafts, and brings the page up to date.
+   - A page was found: `read` it first, and its `slack-html.js` (`action: "read"`, `path: "slack-html.js"`), since a publish that touches an Artifact's file this conversation hasn't read is refused. Then publish the copied `index.html` with `url` set to it and `files: {"slack-html.js": <the copied slack-html.js>}`. That keeps its link, its pin and its drafts, and brings the page up to date.
    - None: publish it new with `title: "Slack Drafts"`, the same `files`, `capabilities: {"db": {"rules": [{"path": "drafts", "read": "owner", "write": "owner"}]}, "user": {}}`, `icon: "message"` and `pin: true`.
 
    Then stop this session's watch on it (`ArtifactComments`, `action: "watch"`, `on: false`, its `url`), so a resumed session doesn't report a comment monitor for it. The mod never publishes; only this step does.
