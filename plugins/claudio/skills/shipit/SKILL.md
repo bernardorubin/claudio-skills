@@ -1,11 +1,12 @@
 ---
 name: shipit
 description: >-
-  Use when taking a Jira ticket or described feature/bugfix from investigation to a
-  review-ready PR, Slack update and worklog entry. Triggers on "ship ABC-123", "take
-  this ticket end to end", "implement ABC-456 and open a PR", "work this ticket",
-  "shipit", or a pasted Jira URL/key with intent to build. Stops before anything that
-  deploys. Only reading or updating a ticket: jira-cli.
+  Use when taking a ticket (Jira by default, or the tracker the repo's CLAUDE.md
+  names) or a described feature/bugfix from investigation to a review-ready PR, Slack
+  update and worklog entry. Triggers on "ship ABC-123", "take this ticket end to end",
+  "implement ABC-456 and open a PR", "work this ticket", "shipit", or a pasted ticket
+  URL/key with intent to build. Stops before anything that deploys. Only reading or
+  updating a Jira ticket: jira-cli.
 ---
 
 # Shipit
@@ -21,7 +22,7 @@ orchestra. Lean on:
 
 | Step | Existing skill |
 |------|----------------|
-| Read / update / comment / transition a ticket | `jira-cli` |
+| Read / update / comment / transition a ticket | `jira-cli` for Jira; otherwise the tracker steps in the repo's CLAUDE.md |
 | Simplify the change before committing | `simplify` (built into Claude Code) |
 | Stage + commit locally (no push) | `git-ac` |
 | Generate / update the PR description | `pr-description` |
@@ -38,6 +39,9 @@ per-directory `CLAUDE.md` for the area you're touching) — **read it before you
 implement, and follow what it says rather than hardcoding anything here.** Every repo
 differs in the things that matter to shipping:
 
+- **Ticket tracker** — where tickets live and how to read, create, claim, move and comment on
+  them (its CLI or API, state names, how to @mention someone). Jira through `jira-cli` is the
+  default when the CLAUDE.md names no tracker. Wherever this skill says Jira, use that tracker.
 - **Base branch and branch-naming** — what feature branches target, and the naming pattern.
 - **Quality gates / test command** — the exact lint/typecheck/test commands to run.
 - **PR flow** — some repos require a changeset and a wrapper command (e.g. a `pnpm pr` /
@@ -59,7 +63,7 @@ spine.
 
 **1. You are more capable than you assume — act, don't defer.**
 You have the tools and the access. Run `gh pr create`, `gh pr edit`, `gh pr comment`,
-`jira-curl`, and git commands directly. Pull data from the project's dashboards and logs
+`jira-curl` (or the repo's tracker CLI/API), and git commands directly. Pull data from the project's dashboards and logs
 yourself (Chrome MCP, the Vercel MCP, the dashboards listed in the repo's CLAUDE.md).
 Handing a runnable command back to the user — or suggesting they "ask a teammate"
 something you can check — is the single most common thing that frustrates them. If you
@@ -87,10 +91,10 @@ applies, hold its rule. Two phases are non-negotiable regardless of ticket size:
 ### 0. No ticket key? Ask before you build
 
 If the user described the work instead of giving a ticket key or URL, **ask in one line
-whether to create the Jira ticket first, or ship without one** — don't silently pick either.
-Something like: *"Create a Jira ticket for this first, or ship without one?"*
+whether to create the ticket first, or ship without one** — don't silently pick either.
+Something like: *"Create a ticket for this first, or ship without one?"*
 
-- **Create it**: use `jira-cli` (`POST /rest/api/3/issue`) — summary and description from what
+- **Create it**: in the repo's tracker; for Jira, use `jira-cli` (`POST /rest/api/3/issue`) — summary and description from what
   they described, ask for project/issue type only if the repo's CLAUDE.md or the instance
   config doesn't make it obvious. Then continue at Phase 1 with the new key.
 - **Ship without one**: skip Phase 1's claim step, and drop the `ABC-1234:` prefix from the
@@ -100,7 +104,7 @@ Skip this question entirely when a key or URL was given.
 
 ### 1. Understand the ticket
 
-Read it with `jira-cli`. Pull the description, acceptance criteria, comments, and any linked
+Read it from the tracker (`jira-cli` for Jira). Pull the description, acceptance criteria, comments, and any linked
 context. Check the project's knowledge vault (`vault-keeper`) for prior context too — team
 ownership, integration quirks, flow docs, past decisions — so you're not rediscovering what's
 already written down. Then split by type:
@@ -114,9 +118,11 @@ already written down. Then split by type:
   CLAUDE.md pre-implementation planning). Outline the approach briefly before writing code.
 
 **Then claim the ticket.** Before moving on, assign it to the user and move it to In Progress
-with `jira-cli`. Don't ask first and don't leave it for later: an unassigned ticket sitting in
+in the tracker. Don't ask first and don't leave it for later: an unassigned ticket sitting in
 To Do while a PR is already open is invisible to standup and to anyone looking for its owner.
 Do this even when the user opened the ticket themselves.
+
+For Jira:
 
 ```bash
 # assignee: look the accountId up fresh, never hardcode or recall it
@@ -128,8 +134,9 @@ jira-curl <instance> GET /rest/api/3/issue/<KEY>/transitions | jq '.transitions[
 jira-curl <instance> POST /rest/api/3/issue/<KEY>/transitions -d '{"transition":{"id":"<id>"}}'
 ```
 
-**Re-read the issue afterwards to confirm both landed.** A wrong transition id returns the same
-empty 204 as a correct one, so the status you read back is the only proof. Skip whichever half
+**Re-read the issue afterwards to confirm both landed.** In Jira a wrong transition id returns the
+same empty 204 as a correct one, and other trackers can fail as quietly, so the state you read
+back is the only proof. Skip whichever half
 is already correct, and if the ticket is assigned to someone else, flag that instead of
 reassigning it.
 
@@ -219,7 +226,7 @@ this Claude Code. Doing it before the commit means the review cycle sees the sim
 Commit with `git-ac` **only if `git status` shows just this task's files** — it runs
 `git add -A` and will sweep up unrelated edits. If there are stray changes, fall back to
 surgical `git add <files>` + commit. Commit message: imperative mood, single lead line, no
-body, no bullets, no Co-Authored-By / AI attribution. Prefix with the Jira key (`ABC-1234:
+body, no bullets, no Co-Authored-By / AI attribution. Prefix with the ticket key (`ABC-1234:
 <action>`) only when the user gave you one for this task.
 
 **Never commit or push database schema changes** — those need manual review and migration.
@@ -276,7 +283,7 @@ green: never mark the PR ready, announce it, or move on while checks are still r
   proceed.
 - **No checks configured**: say that plainly. "No checks ran" is not "checks passed."
 
-If the ticket asked for specific info to live on the PR or the Jira ticket, put it in the
+If the ticket asked for specific info to live on the PR or the ticket, put it in the
 **description / ticket body by default**, not a comment — the user has had to ask for this
 redo before. Use a comment only when they specifically say "comment."
 
@@ -292,10 +299,10 @@ comment and the review doc stay current (it edits the same comment in place).
 
 Use the `write-slack-message` skill (it strips em dashes and applies Slack formatting — never
 write Slack freehand). Keep it short, concrete, and factual — same rule as the PR: don't
-promise check-in cadences or process commitments the user hasn't made. Format any Jira tickets
+promise check-in cadences or process commitments the user hasn't made. Format any tickets
 or URLs as `[label](url)` markdown links, never bare URLs. Skip corporate-y agreement phrasing
-like "+1 on". If you @mention a teammate (here or in a Jira comment), look up their real
-accountId fresh via user search — never hallucinate it, or the mention renders as broken raw
+like "+1 on". If you @mention a teammate (here or in a ticket comment), look up their real
+id fresh via the tracker's user search — never hallucinate it, or the mention renders as broken raw
 text.
 
 If a paste in the conversation looks like a message meant for the user's coworkers, treat it
